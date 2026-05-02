@@ -1,0 +1,198 @@
+# One-click data plane stack.
+#
+#   cd deploy && docker compose up -d
+#
+# Phase 1 services (no profile): postgres, minio, nats, unity-catalog, app.
+# Phase 2/3 services live under profiles:
+#   --profile streaming  → redpanda, risingwave, hive-metastore (compat)
+#   --profile vectors    → milvus + dependencies
+#   --profile timeseries → timescaledb
+#   --profile flowmesh   → FlowMesh server + worker (image needed)
+#   --profile lumilake   → Lumilake server (image needed)
+
+name: lumid-data
+
+networks:
+  lumid_net:
+    name: lumid_net
+    driver: bridge
+
+volumes:
+  postgres_data:
+  minio_data:
+  uc_data:
+  redpanda_data:
+  risingwave_data:
+  milvus_data:
+  timescale_data:
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-postgres.sql:/docker-entrypoint-initdb.d/00_init.sql:ro
+    networks: [lumid_net]
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-08T15-41-24Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-lumid_data}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-lumid_data_secret_change_me}
+    volumes:
+      - minio_data:/data
+    networks: [lumid_net]
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-04-03T17-07-56Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks: [lumid_net]
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 ${S3_ACCESS_KEY:-lumid_data} ${S3_SECRET_KEY:-lumid_data_secret_change_me} 2>/dev/null; do sleep 2; done;
+      mc mb -p local/${S3_BUCKET:-lumid-data} || true;
+      mc mb -p local/uc-data || true;
+      mc anonymous set none local/${S3_BUCKET:-lumid-data};
+      echo 'minio buckets ready';
+      exit 0
+      "
+
+  nats:
+    image: nats:2.10-alpine
+    restart: unless-stopped
+    command: ["-js", "-m", "8222"]
+    networks: [lumid_net]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  unity-catalog:
+    image: unitycatalog/unitycatalog:0.2.1
+    restart: unless-stopped
+    networks: [lumid_net]
+    ports: ["8080:8080"]
+    volumes:
+      - uc_data:/home/unitycatalog/etc
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/2.1/unity-catalog/catalogs"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: lumid-data:dev
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://lumid_data:lumid_data@postgres:5432/lumid_data
+      S3_ENDPOINT: http://minio:9000
+      UC_BASE_URL: http://unity-catalog:8080
+      NATS_URL: nats://nats:4222
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      nats:
+        condition: service_healthy
+      unity-catalog:
+        condition: service_healthy
+    networks: [lumid_net]
+    ports: ["9100:9100"]
+
+  # ---- Phase 2: streaming -------------------------------------------------
+  redpanda:
+    image: redpandadata/redpanda:v24.3.4
+    profiles: ["streaming"]
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp=1
+      - --memory=1G
+      - --reserve-memory=0M
+      - --check=false
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    networks: [lumid_net]
+    ports: ["9092:9092"]
+
+  risingwave:
+    image: risingwavelabs/risingwave:v2.1.0
+    profiles: ["streaming"]
+    restart: unless-stopped
+    command: ["standalone", "--config-path", "/risingwave.toml"]
+    networks: [lumid_net]
+    ports: ["4566:4566"]
+    volumes:
+      - risingwave_data:/risingwave/data
+
+  # ---- Phase 3: vectors ---------------------------------------------------
+  milvus:
+    image: milvusdb/milvus:v2.5.5
+    profiles: ["vectors"]
+    restart: unless-stopped
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_USE_EMBED: "true"
+      ETCD_DATA_DIR: "/var/lib/milvus/etcd"
+      COMMON_STORAGETYPE: "local"
+    volumes:
+      - milvus_data:/var/lib/milvus
+    networks: [lumid_net]
+    ports: ["19530:19530"]
+
+  # ---- Phase 3: timeseries -----------------------------------------------
+  timescaledb:
+    image: timescale/timescaledb:2.18.0-pg16
+    profiles: ["timeseries"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: timescale
+      POSTGRES_PASSWORD: timescale
+      POSTGRES_DB: timescale
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    networks: [lumid_net]
+    ports: ["5433:5432"]
+
+  # ---- FlowMesh + Lumilake stitch points ---------------------------------
+  # When their published images are tagged, add them here under profiles
+  # ["flowmesh"] / ["lumilake"] with env wiring per AGENTS.md §8.
