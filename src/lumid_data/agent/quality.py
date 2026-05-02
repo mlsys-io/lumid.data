@@ -9,7 +9,6 @@ descriptor's policy.
 import logging
 
 import pyarrow as pa
-import pyarrow.compute as pc
 
 from ..schemas.descriptors import QualityReport, SourceDescriptor
 
@@ -71,6 +70,6 @@ def _dedup(table: pa.Table, keys: list[str]) -> tuple[float, pa.Table]:
         else:
             seen.add(key)
             keep_mask.append(True)
-    deduped = table.filter(pc.array(keep_mask))
+    deduped = table.filter(pa.array(keep_mask))
     ratio = (table.num_rows - deduped.num_rows) / max(table.num_rows, 1)
     return ratio, deduped

@@ -33,14 +33,14 @@ def decide(descriptor: SourceDescriptor, modality: Modality) -> RoutingDecision:
         return _build(descriptor, modality, descriptor.policy.override_route)
     if descriptor.cadence == "batch" and modality in {"structured", "text"}:
         return _build(descriptor, modality, "delta")
+    if descriptor.cadence == "batch" and modality in {"image", "audio", "video", "blob"}:
+        return _build(descriptor, modality, "uc_volume_with_manifest")
+    if descriptor.cadence == "batch" and modality == "timeseries":
+        return _build(descriptor, modality, "timescale")
+    if descriptor.cadence == "batch" and descriptor.embed_with:
+        return _build(descriptor, modality, "milvus_embed")
     if descriptor.cadence == "stream":
         return _build(descriptor, modality, "rw_stream")
-    if modality in {"image", "audio", "video", "blob"}:
-        return _build(descriptor, modality, "uc_volume_with_manifest")
-    if modality == "timeseries":
-        return _build(descriptor, modality, "timescale")
-    if descriptor.embed_with:
-        return _build(descriptor, modality, "milvus_embed")
     raise NotImplementedError(
         f"No Phase 1 route for cadence={descriptor.cadence!r} modality={modality!r}"
     )
