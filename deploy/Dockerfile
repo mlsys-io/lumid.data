@@ -17,7 +17,7 @@ WORKDIR /app
 COPY pyproject.toml README.md /app/
 COPY src /app/src
 
-RUN pip install --upgrade pip && pip install ".[vectors]"
+RUN pip install --upgrade pip && pip install ".[vectors,streaming]"
 
 ENV LUMID_DATA_HTTP_PORT=9100
 EXPOSE 9100

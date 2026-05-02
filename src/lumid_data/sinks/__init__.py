@@ -1,5 +1,5 @@
 """Execution stage: write IngestPlan output to the chosen sink."""
 
-from . import delta, dlq
+from . import delta, dlq, redpanda, risingwave
 
-__all__ = ["delta", "dlq"]
+__all__ = ["delta", "dlq", "redpanda", "risingwave"]

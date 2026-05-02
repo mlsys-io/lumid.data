@@ -684,6 +684,7 @@ dev = [
 ]
 streaming = [
     { name = "confluent-kafka" },
+    { name = "psycopg", extra = ["binary"] },
 ]
 vectors = [
     { name = "pymilvus" },
@@ -705,6 +706,7 @@ requires-dist = [
     { name = "openlineage-python", specifier = ">=1.20.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.5.1" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.12" },
+    { name = "psycopg", extras = ["binary"], marker = "extra == 'streaming'", specifier = ">=3.2.12" },
     { name = "pyarrow", specifier = ">=18.0.0" },
     { name = "pyarrow-stubs", marker = "extra == 'dev'", specifier = ">=20.0.0.20251215" },
     { name = "pydantic", specifier = ">=2.12.3" },

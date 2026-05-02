@@ -11,6 +11,11 @@ Stages:
 The plan is the only thing this module returns. Sink execution is the
 caller's responsibility, so the agent stays pure (deterministic, easy
 to test). Replay = re-run `route()` with the same inputs.
+
+Stream-cadence sources don't have per-payload plans (each frame just
+produces to a topic). ``plan_for_stream_source()`` returns a single
+plan at registration time describing the pipeline (topic, target Delta
+table); subsequent frames reference it.
 """
 
 import logging
@@ -18,7 +23,7 @@ from datetime import UTC, datetime
 
 import pyarrow as pa
 
-from ..schemas.descriptors import IngestPlan, SourceDescriptor
+from ..schemas.descriptors import IngestPlan, Modality, SourceDescriptor
 from ..utils.ids import new_plan_id
 from . import decisions, modality, quality, schema
 
@@ -105,3 +110,33 @@ def route(
         status="pending",
     )
     return AgentResult(plan=plan, table=table)
+
+
+def plan_for_stream_source(descriptor: SourceDescriptor) -> IngestPlan:
+    """Produce a one-shot plan for a stream-cadence source at registration time.
+
+    Streaming sources don't have per-payload plans. This single plan
+    captures the pipeline shape (topic, target Delta table) so the
+    bootstrap can provision the Redpanda topic + RW source/MV/sink
+    deterministically. Frames pushed via the WS endpoint reference this
+    plan_id.
+    """
+    if descriptor.cadence != "stream":
+        raise ValueError("plan_for_stream_source requires cadence='stream'")
+    resolved: Modality = (
+        descriptor.modality if descriptor.modality != "auto" else "structured"
+    )
+    decision = decisions.decide(descriptor, resolved)
+    return IngestPlan(
+        plan_id=new_plan_id(),
+        ingest_id="ing-stream",
+        source_id=descriptor.source_id or "",
+        received_at=datetime.now(UTC),
+        modality_resolved=resolved,
+        route=decision.route,
+        target_table=decision.target_table,
+        target_volume=decision.target_volume,
+        target_topic=decision.target_topic,
+        policy_applied=descriptor.policy.model_dump(),
+        status="pending",
+    )

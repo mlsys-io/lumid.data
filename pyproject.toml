@@ -30,6 +30,7 @@ dependencies = [
 [project.optional-dependencies]
 streaming = [
     "confluent-kafka>=2.6.0",
+    "psycopg[binary]>=3.2.12",
 ]
 vectors = [
     "pymilvus>=2.5.0",
@@ -83,6 +84,8 @@ plugins = ["pydantic.mypy"]
 [[tool.mypy.overrides]]
 module = [
     "boto3",
+    "confluent_kafka",
+    "confluent_kafka.admin",
     "deltalake",
     "deltalake.exceptions",
     "magic",

@@ -10,7 +10,9 @@ from ...db.models import Source
 from ...schemas.descriptors import SourceDescriptor
 from ...utils.ids import new_source_id
 from ..auth.security import PrincipalContext, require_scope
-from ..deps import get_session
+from ..deps import get_session, get_state
+from ..services.streaming import bootstrap_stream_source
+from ..state import AppState
 
 router = APIRouter(prefix="/v1/sources", tags=["sources"])
 
@@ -18,6 +20,7 @@ router = APIRouter(prefix="/v1/sources", tags=["sources"])
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=SourceDescriptor)
 async def register_source(
     descriptor: SourceDescriptor,
+    state: AppState = Depends(get_state),
     session: AsyncSession = Depends(get_session),
     _principal: PrincipalContext = Depends(require_scope("sources:write")),
 ) -> SourceDescriptor:
@@ -41,6 +44,9 @@ async def register_source(
         paused=descriptor.paused,
     )
     session.add(row)
+    await session.flush()
+    if descriptor.cadence == "stream":
+        await bootstrap_stream_source(state, descriptor, row, session)
     await session.commit()
     return descriptor
 

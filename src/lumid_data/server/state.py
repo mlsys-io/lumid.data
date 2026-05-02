@@ -9,6 +9,8 @@ from ..catalog.nats_publisher import NatsPublisher
 from ..catalog.unity import UnityClient
 from ..sinks.delta import DeltaSinkConfig
 from ..sinks.dlq import DlqSinkConfig
+from ..sinks.redpanda import RedpandaProducer
+from ..sinks.risingwave import RisingWaveConfig
 from .config import Settings
 
 
@@ -22,3 +24,9 @@ class AppState:
     unity: UnityClient
     traces: FlowMeshTracesClient
     nats: NatsPublisher
+    redpanda: RedpandaProducer | None = None
+    risingwave_cfg: RisingWaveConfig | None = None
+
+    @property
+    def streaming_enabled(self) -> bool:
+        return self.redpanda is not None and self.risingwave_cfg is not None

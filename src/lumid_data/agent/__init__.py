@@ -6,6 +6,14 @@ Dataforge (arXiv 2511.06185).
 """
 
 from . import decisions, modality, quality, schema
-from .router import AgentResult, route
+from .router import AgentResult, plan_for_stream_source, route
 
-__all__ = ["AgentResult", "decisions", "modality", "quality", "route", "schema"]
+__all__ = [
+    "AgentResult",
+    "decisions",
+    "modality",
+    "plan_for_stream_source",
+    "quality",
+    "route",
+    "schema",
+]

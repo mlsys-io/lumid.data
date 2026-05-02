@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     flowmesh_traces_url: str | None = Field(None, alias="FLOWMESH_TRACES_URL")
     flowmesh_traces_token: str | None = Field(None, alias="FLOWMESH_TRACES_TOKEN")
 
+    streaming_enabled: bool = Field(False, alias="LUMID_DATA_STREAMING_ENABLED")
+    redpanda_brokers: str | None = Field(None, alias="REDPANDA_BROKERS")
+    risingwave_dsn: str | None = Field(None, alias="RISINGWAVE_DSN")
+
     plugins: str = Field("", alias="LUMID_DATA_PLUGINS")
     lumid_oauth_introspect_url: str | None = Field(
         None, alias="LUMID_OAUTH_INTROSPECT_URL"

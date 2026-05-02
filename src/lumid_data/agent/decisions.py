@@ -59,7 +59,7 @@ def _build(
     if route == "delta":
         return RoutingDecision(route=route, target_table=f"{namespace}.{table_name}")
     if route == "rw_stream":
-        topic = f"{namespace}__{table_name}"
+        topic = f"{namespace.replace('.', '__')}__{table_name}"
         return RoutingDecision(
             route=route,
             target_topic=topic,

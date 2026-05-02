@@ -5,10 +5,6 @@ import pyarrow as pa
 from lumid_data.agent.schema import fingerprint, infer, reconcile
 
 
-def _schema(fields: dict[str, pa.DataType]) -> pa.Schema:
-    return pa.schema(fields)
-
-
 def test_csv_inference() -> None:
     table = infer(b"x,y\n1,2\n3,4\n", "structured", mime_hint="text/csv")
     assert set(table.column_names) == {"x", "y"}
@@ -27,6 +23,10 @@ def test_text_wraps_into_fixed_schema() -> None:
     assert "content" in table.column_names
     assert "mime" in table.column_names
     assert "ts" in table.column_names
+
+
+def _schema(fields: dict[str, pa.DataType]) -> pa.Schema:
+    return pa.schema(fields)
 
 
 def test_fingerprint_stable() -> None:

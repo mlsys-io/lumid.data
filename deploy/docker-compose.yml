@@ -120,6 +120,9 @@ services:
       S3_ENDPOINT: http://minio:9000
       UC_BASE_URL: http://unity-catalog:8080
       NATS_URL: nats://nats:4222
+      LUMID_DATA_STREAMING_ENABLED: ${LUMID_DATA_STREAMING_ENABLED:-true}
+      REDPANDA_BROKERS: redpanda:9092
+      RISINGWAVE_DSN: postgresql://root@risingwave:4566/dev
     depends_on:
       postgres:
         condition: service_healthy
@@ -131,13 +134,16 @@ services:
         condition: service_healthy
       unity-catalog:
         condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      risingwave:
+        condition: service_healthy
     networks: [lumid_net]
     ports: ["9100:9100"]
 
-  # ---- Phase 2: streaming -------------------------------------------------
+  # ---- Phase 2: streaming (default-on for one-click) ----------------------
   redpanda:
     image: redpandadata/redpanda:v24.3.4
-    profiles: ["streaming"]
     restart: unless-stopped
     command:
       - redpanda
@@ -153,16 +159,28 @@ services:
       - redpanda_data:/var/lib/redpanda/data
     networks: [lumid_net]
     ports: ["9092:9092"]
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "info"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   risingwave:
     image: risingwavelabs/risingwave:v2.1.0
-    profiles: ["streaming"]
     restart: unless-stopped
-    command: ["standalone", "--config-path", "/risingwave.toml"]
+    command: ["standalone"]
     networks: [lumid_net]
     ports: ["4566:4566"]
     volumes:
       - risingwave_data:/risingwave/data
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "psql -h 127.0.0.1 -p 4566 -d dev -U root -c 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   # ---- Phase 3: vectors ---------------------------------------------------
   milvus:

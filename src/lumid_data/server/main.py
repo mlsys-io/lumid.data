@@ -13,6 +13,8 @@ from ..catalog.unity import UnityClient
 from ..db import Base, make_engine, make_sessionmaker
 from ..sinks.delta import DeltaSinkConfig
 from ..sinks.dlq import DlqSinkConfig
+from ..sinks.redpanda import RedpandaConfig, RedpandaProducer
+from ..sinks.risingwave import RisingWaveConfig
 from .config import load_settings
 from .routers import admin
 from .routers import catalog as catalog_router
@@ -56,6 +58,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     nats = NatsPublisher(url=settings.nats_url)
     await nats.connect()
 
+    redpanda: RedpandaProducer | None = None
+    risingwave_cfg: RisingWaveConfig | None = None
+    if settings.streaming_enabled:
+        if settings.redpanda_brokers:
+            redpanda = RedpandaProducer(
+                RedpandaConfig(bootstrap_servers=settings.redpanda_brokers)
+            )
+            redpanda.connect()
+        if settings.risingwave_dsn:
+            risingwave_cfg = RisingWaveConfig(dsn=settings.risingwave_dsn)
+
     state = AppState(
         settings=settings,
         engine=engine,
@@ -65,6 +78,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         unity=unity,
         traces=traces,
         nats=nats,
+        redpanda=redpanda,
+        risingwave_cfg=risingwave_cfg,
     )
     app.state.app_state = state
 
@@ -87,6 +102,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await plugin_stack.aclose()
+        if redpanda is not None:
+            redpanda.close()
         await nats.close()
         await engine.dispose()
 
