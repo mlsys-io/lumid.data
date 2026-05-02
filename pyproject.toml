@@ -1,0 +1,105 @@
+[project]
+name = "lumid-data"
+version = "0.1.0"
+description = "Data plane for the lumid + FlowMesh + Lumilake stack."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "fastapi>=0.120.3",
+    "uvicorn[standard]>=0.32.1",
+    "pydantic>=2.12.3",
+    "pydantic-settings>=2.6.0",
+    "httpx>=0.28.1",
+    "python-multipart>=0.0.26",
+    "websockets>=15.0.1",
+    "sqlalchemy>=2.0.44",
+    "psycopg[binary]>=3.2.12",
+    "alembic>=1.14.0",
+    "deltalake>=0.21.0",
+    "pyarrow>=18.0.0",
+    "boto3>=1.41.5",
+    "nats-py>=2.9.0",
+    "openlineage-python>=1.20.0",
+    "python-magic>=0.4.27",
+    "pyyaml>=6.0.2",
+    "typer>=0.15.0",
+    "rich>=14.2.0",
+]
+
+[project.optional-dependencies]
+streaming = [
+    "confluent-kafka>=2.6.0",
+]
+vectors = [
+    "pymilvus>=2.5.0",
+]
+dev = [
+    "black>=25.12.0",
+    "codespell>=2.4.1",
+    "isort>=7.0.0",
+    "mypy>=1.19.1",
+    "pre-commit>=4.5.1",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.3.0",
+    "pyarrow-stubs>=20.0.0.20251215",
+    "respx>=0.22.0",
+    "ruff>=0.14.10",
+    "types-pyyaml>=6.0.12.20250915",
+]
+
+[project.scripts]
+lumid-data = "lumid_data.cli.main:app"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.isort]
+profile = "black"
+
+[tool.black]
+target-version = ["py312"]
+
+[tool.ruff]
+target-version = "py312"
+lint.select = ["E", "F", "UP", "I"]
+lint.ignore = ["I001"]
+extend-exclude = ["__init__.pyi"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src", "tests"]
+ignore_missing_imports = false
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "deltalake",
+    "deltalake.*",
+    "pymilvus",
+    "pymilvus.*",
+    "magic",
+    "openlineage.*",
+    "nats",
+    "nats.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.bandit]
+exclude_dirs = ["tests", "agent_space"]
+skips = []
+
+[tool.codespell]
+skip = "*.lock,*.svg,*.po,*.json,*.yaml,*.yml,deploy/*,*.toml"
+ignore-words-list = "lumid,deltalake,unitycatalog"
