@@ -99,6 +99,33 @@ class UnityClient:
             r.raise_for_status()
             return r.json()
 
+    def ensure_volume(
+        self,
+        full_name: str,
+        storage_location: str,
+        comment: str | None = None,
+    ) -> None:
+        catalog, schema, name = full_name.split(".", 2)
+        body: dict[str, Any] = {
+            "name": name,
+            "catalog_name": catalog,
+            "schema_name": schema,
+            "volume_type": "EXTERNAL",
+            "storage_location": storage_location,
+        }
+        if comment:
+            body["comment"] = comment
+        with httpx.Client(timeout=_TIMEOUT) as c:
+            r = c.post(
+                f"{self.base_url}/api/2.1/unity-catalog/volumes",
+                json=body,
+                headers=self._headers(),
+            )
+            if r.status_code in (200, 201, 409):
+                return
+            logger.warning("UC ensure_volume failed: %s %s", r.status_code, r.text)
+            r.raise_for_status()
+
 
 def arrow_columns_to_uc(schema: Any) -> list[dict[str, Any]]:
     """Convert pyarrow schema fields to UC column descriptors."""

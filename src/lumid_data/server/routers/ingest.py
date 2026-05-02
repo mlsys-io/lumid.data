@@ -7,8 +7,10 @@ from datetime import UTC, datetime
 from fastapi import (
     APIRouter,
     Depends,
+    File,
     HTTPException,
     Request,
+    UploadFile,
     WebSocket,
     WebSocketDisconnect,
     status,
@@ -18,8 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...agent import route as agent_route
 from ...catalog import unity as uc
 from ...db.models import Dataset, DlqEntry, IngestJob, IngestPlanRow, Source
-from ...schemas.descriptors import DatasetReady
-from ...sinks import delta, dlq
+from ...schemas.descriptors import DatasetReady, IngestPlan
+from ...sinks import delta, dlq, objects
 from ...utils.ids import (
     new_dataset_id,
     new_dlq_id,
@@ -44,6 +46,47 @@ async def ingest_push(
     session: AsyncSession = Depends(get_session),
     _principal: PrincipalContext = Depends(require_scope("ingest:write")),
 ) -> dict[str, str]:
+    payload = await request.body()
+    mime = request.headers.get("content-type")
+    return await _run_ingest(
+        state=state,
+        session=session,
+        principal=_principal,
+        source_id=source_id,
+        payload=payload,
+        mime=mime,
+    )
+
+
+@router.post("/{source_id}/files", status_code=status.HTTP_202_ACCEPTED)
+async def ingest_multipart(
+    source_id: str,
+    file: UploadFile = File(...),
+    state: AppState = Depends(get_state),
+    session: AsyncSession = Depends(get_session),
+    _principal: PrincipalContext = Depends(require_scope("ingest:write")),
+) -> dict[str, str]:
+    """Convenience multipart endpoint: ``curl -F file=@image.png``."""
+    payload = await file.read()
+    return await _run_ingest(
+        state=state,
+        session=session,
+        principal=_principal,
+        source_id=source_id,
+        payload=payload,
+        mime=file.content_type or "application/octet-stream",
+    )
+
+
+async def _run_ingest(
+    *,
+    state: AppState,
+    session: AsyncSession,
+    principal: PrincipalContext,
+    source_id: str,
+    payload: bytes,
+    mime: str | None,
+) -> dict[str, str]:
     src_row = await session.get(Source, source_id)
     if src_row is None:
         raise HTTPException(status_code=404, detail="source not found")
@@ -51,8 +94,6 @@ async def ingest_push(
         raise HTTPException(status_code=409, detail="source is paused")
 
     descriptor = _to_descriptor(src_row)
-    payload = await request.body()
-    mime = request.headers.get("content-type")
 
     ingest_id = new_ingest_id()
     job = IngestJob(
@@ -108,9 +149,9 @@ async def ingest_push(
         await session.commit()
         return {"ingest_id": ingest_id, "plan_id": plan.plan_id, "status": "dlq"}
 
-    if plan.route != "delta":
+    if plan.route not in ("delta", "uc_volume_with_manifest"):
         job.status = "failed"
-        job.error = f"Phase 1 only supports route=delta (got {plan.route!r})"
+        job.error = f"unsupported batch route {plan.route!r}"
         plan_row.status = "failed"
         plan_row.error = job.error
         await session.commit()
@@ -120,16 +161,21 @@ async def ingest_push(
     state.unity.ensure_catalog(state.settings.uc_catalog)
     catalog, schema_name, _ = plan.target_table.split(".", 2)
     state.unity.ensure_schema(catalog, schema_name)
+
+    arrow_table = result.table
+    if plan.route == "uc_volume_with_manifest":
+        assert plan.target_volume is not None
+        arrow_table = _land_blob(state, plan, payload, mime)
     table_uri = delta.write(
         state.delta_cfg,
         plan.target_table,
-        result.table,
+        arrow_table,
         partition_by=descriptor.partition_by or None,
     )
     state.unity.register_external_delta(
         full_name=plan.target_table,
         storage_location=table_uri,
-        columns=uc.arrow_columns_to_uc(result.table.schema),
+        columns=uc.arrow_columns_to_uc(arrow_table.schema),
     )
 
     is_first = False
@@ -139,16 +185,17 @@ async def ingest_push(
             dataset_id=new_dataset_id(),
             source_id=source_id,
             table_uri=table_uri,
+            volume_uri=plan.target_volume,
             modality=plan.modality_resolved,
             schema_fp=plan.schema_fp,
             version=1,
-            rows_total=result.table.num_rows,
+            rows_total=arrow_table.num_rows,
         )
         session.add(dataset_row)
         is_first = True
     else:
         dataset_row.version += 1
-        dataset_row.rows_total += result.table.num_rows
+        dataset_row.rows_total += arrow_table.num_rows
         dataset_row.schema_fp = plan.schema_fp
         dataset_row.updated_at = datetime.now(UTC)
 
@@ -162,11 +209,12 @@ async def ingest_push(
         dataset_id=dataset_row.dataset_id,
         source_id=source_id,
         table_uri=table_uri,
+        volume_uri=plan.target_volume,
         modality=plan.modality_resolved,
         schema_fp=plan.schema_fp,
         version=dataset_row.version,
         is_first=is_first,
-        rows_added=result.table.num_rows,
+        rows_added=arrow_table.num_rows,
     )
     await state.nats.publish_dataset_ready(event)
 
@@ -184,6 +232,42 @@ async def _find_dataset(session: AsyncSession, *, table_uri: str) -> Dataset | N
     stmt = select(Dataset).where(Dataset.table_uri == table_uri)
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
+
+
+def _land_blob(state: AppState, plan: IngestPlan, payload: bytes, mime: str | None):
+    """Write blob to MinIO under the UC volume; rebuild manifest with object_uri.
+
+    Returns the manifest pyarrow.Table that gets appended to the Delta
+    manifest table. Idempotent: existing object keys are skipped.
+    """
+    from ...agent import blob as agent_blob
+
+    assert plan.target_volume is not None
+    sha256 = agent_blob.compute_sha256(payload)
+    volume_path = plan.target_volume.replace(".", "/")
+    obj_cfg = objects.ObjectSinkConfig(
+        s3_endpoint=state.delta_cfg.s3_endpoint,
+        s3_access_key=state.delta_cfg.s3_access_key,
+        s3_secret_key=state.delta_cfg.s3_secret_key,
+        s3_bucket=state.delta_cfg.s3_bucket,
+        s3_region=state.delta_cfg.s3_region,
+    )
+    object_uri = objects.write_blob(
+        obj_cfg,
+        volume_path=volume_path,
+        sha256=sha256,
+        payload=payload,
+        content_type=mime,
+    )
+    volume_root = f"s3://{obj_cfg.s3_bucket}/{volume_path}"
+    state.unity.ensure_volume(plan.target_volume, storage_location=volume_root)
+    return agent_blob.manifest_row(
+        object_uri=object_uri,
+        sha256=sha256,
+        modality=plan.modality_resolved,
+        content_type=mime,
+        size_bytes=len(payload),
+    )
 
 
 @router.websocket("/stream/{source_id}")

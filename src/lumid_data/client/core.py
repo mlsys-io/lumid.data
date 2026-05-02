@@ -146,6 +146,16 @@ class Client:
             data = tomllib.load(f)
         return Credentials(app=app, raw=data)
 
+    def fs(self, source_id: str) -> "FsHandle":
+        """Return a path-shaped handle over the source's UC volume / table.
+
+        Phase 3 first cut: ``write_bytes`` ingests via the multipart
+        endpoint; ``read_blobs`` resolves the manifest table to a list of
+        S3 object URIs. Random-access ``read_bytes`` (Phase 4) requires
+        the FUSE shim.
+        """
+        return FsHandle(client=self, source_id=source_id)
+
     async def subscribe(
         self, event: str = "DatasetReady"
     ) -> AsyncIterator[dict[str, Any]]:
@@ -177,3 +187,28 @@ def _encode_payload(
     if isinstance(payload, list) or isinstance(payload, dict):
         return json.dumps(payload).encode("utf-8"), "application/json"
     raise TypeError(f"unsupported payload type {type(payload).__name__}")
+
+
+@dataclass
+class FsHandle:
+    """Path-shaped handle over a source's UC volume + manifest table."""
+
+    client: "Client"
+    source_id: str
+
+    def write_bytes(self, content: bytes, mime: str | None = None) -> dict[str, Any]:
+        return self.client.ingest(self.source_id, content, mime=mime)
+
+    def read_blobs(self) -> list[str]:
+        """List object URIs from the latest manifest of this source."""
+        ds = self.client.list_datasets(source_id=self.source_id)
+        if not ds:
+            return []
+        latest = ds[0]
+        if not latest.get("table_uri"):
+            return []
+        table = self.client._read_delta_uri(latest["table_uri"])
+        if "object_uri" not in table.column_names:
+            return []
+        col = table.column("object_uri").to_pylist()
+        return [s for s in col if isinstance(s, str) and s]

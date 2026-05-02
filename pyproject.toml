@@ -91,6 +91,7 @@ module = [
     "magic",
     "nats",
     "nats.aio.client",
+    "pymilvus",
 ]
 ignore_missing_imports = true
 

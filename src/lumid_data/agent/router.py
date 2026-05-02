@@ -25,7 +25,9 @@ import pyarrow as pa
 
 from ..schemas.descriptors import IngestPlan, Modality, SourceDescriptor
 from ..utils.ids import new_plan_id
-from . import decisions, modality, quality, schema
+from . import blob, decisions, modality, quality, schema
+
+_BLOB_MODALITIES: set[Modality] = {"image", "audio", "video", "blob"}
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,16 @@ def route(
     """
     received_at = datetime.now(UTC)
     resolved = modality.classify(payload, descriptor, mime_override=mime_override)
+
+    if resolved in _BLOB_MODALITIES:
+        return _route_blob(
+            payload=payload,
+            descriptor=descriptor,
+            ingest_id=ingest_id,
+            received_at=received_at,
+            resolved=resolved,
+            mime_override=mime_override,
+        )
 
     try:
         table = schema.infer(
@@ -110,6 +122,47 @@ def route(
         status="pending",
     )
     return AgentResult(plan=plan, table=table)
+
+
+def _route_blob(
+    *,
+    payload: bytes,
+    descriptor: SourceDescriptor,
+    ingest_id: str,
+    received_at: datetime,
+    resolved: Modality,
+    mime_override: str | None,
+) -> AgentResult:
+    """Blob path: skip schema inference; build manifest row and route to UC volume."""
+    from ..schemas.descriptors import QualityReport
+
+    sha256 = blob.compute_sha256(payload)
+    content_type = mime_override or descriptor.mime_hint
+    manifest = blob.manifest_row(
+        object_uri="",  # filled in by the sink after upload
+        sha256=sha256,
+        modality=resolved,
+        content_type=content_type,
+        size_bytes=len(payload),
+    )
+    qreport = QualityReport(rows_in=1, rows_out=1)
+    decision = decisions.decide(descriptor, resolved)
+    plan = IngestPlan(
+        plan_id=new_plan_id(),
+        ingest_id=ingest_id,
+        source_id=descriptor.source_id or "",
+        received_at=received_at,
+        modality_resolved=resolved,
+        route=decision.route,
+        target_table=decision.target_table,
+        target_volume=decision.target_volume,
+        target_topic=decision.target_topic,
+        schema_fp=schema.fingerprint(blob.MANIFEST_SCHEMA),
+        quality_report=qreport,
+        policy_applied=descriptor.policy.model_dump(),
+        status="pending",
+    )
+    return AgentResult(plan=plan, table=manifest)
 
 
 def plan_for_stream_source(descriptor: SourceDescriptor) -> IngestPlan:
