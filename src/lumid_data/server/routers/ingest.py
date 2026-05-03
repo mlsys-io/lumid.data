@@ -1,6 +1,6 @@
 """Ingest endpoints. Phase 1: push (POST). Streaming WS deferred to Phase 2."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,7 +46,7 @@ async def ingest_push(
     job = IngestJob(
         ingest_id=ingest_id,
         source_id=source_id,
-        received_at=datetime.now(timezone.utc),
+        received_at=datetime.now(UTC),
         payload_size=len(payload),
         payload_mime=mime,
         status="pending",
@@ -138,23 +138,13 @@ async def ingest_push(
         dataset_row.version += 1
         dataset_row.rows_total += result.table.num_rows
         dataset_row.schema_fp = plan.schema_fp
-        dataset_row.updated_at = datetime.now(timezone.utc)
+        dataset_row.updated_at = datetime.now(UTC)
 
     plan_row.status = "succeeded"
-    plan_row.completed_at = datetime.now(timezone.utc)
+    plan_row.completed_at = datetime.now(UTC)
     job.status = "succeeded"
     await session.commit()
 
-    state.governance.register_dataset(
-        {
-            "dataset_id": dataset_row.dataset_id,
-            "source_id": source_id,
-            "table_uri": table_uri,
-            "modality": plan.modality_resolved,
-            "schema_fp": plan.schema_fp,
-            "owner": _principal.principal_id,
-        }
-    )
     event = DatasetReady(
         event_id=new_event_id(),
         dataset_id=dataset_row.dataset_id,

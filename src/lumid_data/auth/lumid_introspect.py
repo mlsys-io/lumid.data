@@ -47,7 +47,9 @@ class IntrospectedToken(BaseModel):
 _cache: dict[str, IntrospectedToken] = {}
 
 
-async def introspect_token(raw_key: str, logger: logging.Logger) -> IntrospectedToken | None:
+async def introspect_token(
+    raw_key: str, logger: logging.Logger
+) -> IntrospectedToken | None:
     digest = hashlib.sha256(raw_key.encode()).hexdigest()
     now = time.time()
     cached = _cache.get(digest)
@@ -66,7 +68,9 @@ async def introspect_token(raw_key: str, logger: logging.Logger) -> Introspected
         return None
 
     if resp.status_code != 200:
-        logger.warning("lum.id introspect status=%d body=%s", resp.status_code, resp.text[:200])
+        logger.warning(
+            "lum.id introspect status=%d body=%s", resp.status_code, resp.text[:200]
+        )
         return None
     try:
         body: dict[str, Any] = resp.json()
@@ -115,7 +119,9 @@ def map_scopes_for_lumid_data(scopes: list[str]) -> list[str]:
 class LumidIdentityProvider:
     name = "lumid"
 
-    async def resolve(self, raw_token: str, logger: logging.Logger) -> PrincipalContext | None:
+    async def resolve(
+        self, raw_token: str, logger: logging.Logger
+    ) -> PrincipalContext | None:
         introspected = await introspect_token(raw_token, logger)
         if introspected is None:
             raise HTTPException(
@@ -128,7 +134,11 @@ class LumidIdentityProvider:
                 detail=f"Invalid API key ({introspected.reason or 'inactive'})",
             )
         assert introspected.sub is not None
-        scopes = [s for s in map_scopes_for_lumid_data(introspected.scopes) if s in ALLOWED_SCOPES]
+        scopes = [
+            s
+            for s in map_scopes_for_lumid_data(introspected.scopes)
+            if s in ALLOWED_SCOPES
+        ]
         return PrincipalContext(
             principal_id=introspected.sub,
             org_id=_LUMID_ORG_ID,

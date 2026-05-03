@@ -1,5 +1,5 @@
-"""Catalog publishers: Unity Catalog, FlowMesh governance, NATS events."""
+"""Catalog publishers: Unity Catalog, FlowMesh trace upload, NATS events."""
 
-from . import flowmesh_governance, nats_publisher, unity
+from . import flowmesh_traces, nats_publisher, unity
 
-__all__ = ["flowmesh_governance", "nats_publisher", "unity"]
+__all__ = ["flowmesh_traces", "nats_publisher", "unity"]

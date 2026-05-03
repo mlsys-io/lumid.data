@@ -34,7 +34,7 @@ RisingWave, Milvus, TimescaleDB).
    │   sinks:    delta / risingwave / objects /   │
    │             milvus / timescale / dlq         │
    │   catalog:  Unity Catalog (table-of-record)  │
-   │             FlowMesh governance (lineage)    │
+   │             FlowMesh traces (per-task lineage) │
    │             NATS DatasetReady event          │
    └─────────────────────────────────────────────┘
         │              │            │
@@ -45,7 +45,7 @@ RisingWave, Milvus, TimescaleDB).
    Unity Catalog ── Hive Metastore (mirror)
         │
         ▼
-   Lumilake (reads governance, plans via OaaS-Runmesh, submits to FlowMesh)
+   Lumilake (subscribes to DatasetReady, plans via OaaS-Runmesh, submits to FlowMesh)
         │
         ▼
    FlowMesh (data_retrieval+delta, data_profiling+delta, ...)
@@ -59,7 +59,7 @@ RisingWave, Milvus, TimescaleDB).
 | `src/lumid_data/agent/` | modality, schema, quality, decisions, router |
 | `src/lumid_data/sources/` | webhook, rest_poll, s3_watch, file_drop, cdc_pg |
 | `src/lumid_data/sinks/` | delta, risingwave, objects, milvus, timescale, dlq |
-| `src/lumid_data/catalog/` | unity, hms, flowmesh_governance, nats_publisher |
+| `src/lumid_data/catalog/` | unity, hms, flowmesh_traces, nats_publisher |
 | `src/lumid_data/schemas/` | pydantic v2: descriptors, lineage |
 | `src/lumid_data/auth/` | lumid_introspect (mirrors Lumilake's plugin) |
 | `src/lumid_data/db/` | Postgres source registry + ingest jobs + IngestPlan ledger |
@@ -84,7 +84,7 @@ RisingWave, Milvus, TimescaleDB).
 | Op DB | PostgreSQL |
 | Compute | FlowMesh (existing) |
 | Workflow optimizer | Lumilake (existing) |
-| Governance / lineage | FlowMesh (post-refactor #3) |
+| Governance / lineage | FlowMesh traces (mlsys-io/FlowMesh#3 — OTel span/asset/lineage JSONL); cross-service notify via NATS DatasetReady |
 | Identity | lumid (`/oauth/introspect`) |
 
 ## Setup
@@ -185,7 +185,7 @@ to `deploy/.env.example`. Run
 | `RISINGWAVE_URL` | – | RW PG-protocol DSN |
 | `MILVUS_URI` | – | Milvus connection |
 | `TIMESCALE_URL` | – | TimescaleDB DSN |
-| `FLOWMESH_GOVERNANCE_URL` | – | FlowMesh governance API base |
+| `FLOWMESH_TRACES_URL` | – | FlowMesh traces API base (post-PR mlsys-io/FlowMesh#3); optional, used only when ingest carries a task_id |
 | `LUMID_OAUTH_INTROSPECT_URL` | – | lumid introspect endpoint |
 | `LUMID_DATA_PLUGINS` | – | CSV of plugin module names |
 | `LOG_LEVEL` | `INFO` | log level |

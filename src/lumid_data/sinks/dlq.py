@@ -20,7 +20,9 @@ class DlqSinkConfig:
     s3_region: str = "us-east-1"
 
 
-def store_payload(cfg: DlqSinkConfig, dlq_id: str, payload: bytes, mime: str | None) -> str:
+def store_payload(
+    cfg: DlqSinkConfig, dlq_id: str, payload: bytes, mime: str | None
+) -> str:
     """Store the raw payload to MinIO; return the s3 URI."""
     s3 = boto3.client(
         "s3",

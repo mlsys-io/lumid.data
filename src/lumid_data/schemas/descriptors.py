@@ -1,6 +1,6 @@
 """Pydantic schemas for source descriptors, ingest plans, and dataset events."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -66,10 +66,10 @@ class SourceDescriptor(BaseModel):
     embed_with: str | None = None
     partition_by: list[str] = Field(default_factory=list)
     dedup_keys: list[str] = Field(default_factory=list)
-    policy: SourcePolicy = Field(default_factory=SourcePolicy)
+    policy: SourcePolicy = Field(default_factory=lambda: SourcePolicy())
     pull_config: PullConfig | None = None
     paused: bool = False
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class QualityReport(BaseModel):
@@ -87,7 +87,7 @@ class QualityReport(BaseModel):
 
 
 class IngestPlan(BaseModel):
-    """The agent's deterministic plan for a single payload, recorded before sinks run."""
+    """Deterministic plan for a single payload, recorded before sinks run."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -101,14 +101,14 @@ class IngestPlan(BaseModel):
     target_volume: str | None = None
     target_topic: str | None = None
     schema_fp: str | None = None
-    quality_report: QualityReport = Field(default_factory=QualityReport)
+    quality_report: QualityReport = Field(default_factory=lambda: QualityReport())
     policy_applied: dict[str, Any] = Field(default_factory=dict)
     status: PlanStatus = "pending"
     error: str | None = None
 
 
 class DatasetReady(BaseModel):
-    """NATS event published the first time a dataset is created (and on subsequent appends as configured)."""
+    """NATS event for new datasets (and subsequent appends, as configured)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -123,4 +123,4 @@ class DatasetReady(BaseModel):
     version: int = 1
     is_first: bool = True
     rows_added: int | None = None
-    emitted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    emitted_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

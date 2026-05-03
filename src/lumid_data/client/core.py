@@ -93,7 +93,9 @@ class Client:
 
     def get_dataset(self, dataset_id: str) -> dict[str, Any]:
         with httpx.Client(timeout=self._timeout) as c:
-            r = c.get(f"{self._base_url}/v1/datasets/{dataset_id}", headers=self._headers())
+            r = c.get(
+                f"{self._base_url}/v1/datasets/{dataset_id}", headers=self._headers()
+            )
             if r.status_code >= 300:
                 raise ClientError(f"dataset fetch failed ({r.status_code}): {r.text}")
             return r.json()
@@ -144,7 +146,9 @@ class Client:
             data = tomllib.load(f)
         return Credentials(app=app, raw=data)
 
-    async def subscribe(self, event: str = "DatasetReady") -> AsyncIterator[dict[str, Any]]:
+    async def subscribe(
+        self, event: str = "DatasetReady"
+    ) -> AsyncIterator[dict[str, Any]]:
         if self._nats_url is None:
             raise ClientError("NATS_URL not configured for subscribe()")
         subject = {

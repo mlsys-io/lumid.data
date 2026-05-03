@@ -13,7 +13,9 @@ app = typer.Typer(
 app.add_typer(commands.stack.app, name="stack", help="Local docker-compose lifecycle.")
 app.add_typer(commands.source.app, name="source", help="Source registry CRUD.")
 app.add_typer(commands.dlq.app, name="dlq", help="Dead-letter queue inspection.")
-app.command("healthz", help="Probe the data-plane /healthz endpoint.")(commands.healthz.run)
+app.command("healthz", help="Probe the data-plane /healthz endpoint.")(
+    commands.healthz.run
+)
 
 
 def main() -> None:

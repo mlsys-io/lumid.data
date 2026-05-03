@@ -9,7 +9,17 @@ if not pr_title:
     print("PR title is empty.")
     sys.exit(1)
 
-ALLOWED_TYPES = ["feat", "fix", "refactor", "chore", "test", "perf", "build", "ci", "docs"]
+ALLOWED_TYPES = [
+    "feat",
+    "fix",
+    "refactor",
+    "chore",
+    "test",
+    "perf",
+    "build",
+    "ci",
+    "docs",
+]
 
 progress_match = re.match(r"^\[\d+/[\dNn]+\]\s*(.+)$", pr_title, re.IGNORECASE)
 if progress_match:
@@ -24,7 +34,9 @@ else:
     is_breaking = False
 
 types_re = "|".join(re.escape(t) for t in ALLOWED_TYPES)
-type_match = re.match(rf"^({types_re})(\([\w\-./]+\))?:\s+.+$", core_title, re.IGNORECASE)
+type_match = re.match(
+    rf"^({types_re})(\([\w\-./]+\))?:\s+.+$", core_title, re.IGNORECASE
+)
 if not type_match:
     print(f"Invalid PR title: '{pr_title}'")
     print("   Expected format: type(scope): description")

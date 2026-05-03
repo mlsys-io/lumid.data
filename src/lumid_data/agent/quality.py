@@ -15,7 +15,9 @@ from ..schemas.descriptors import QualityReport, SourceDescriptor
 logger = logging.getLogger(__name__)
 
 
-def check(table: pa.Table, descriptor: SourceDescriptor) -> tuple[pa.Table, QualityReport]:
+def check(
+    table: pa.Table, descriptor: SourceDescriptor
+) -> tuple[pa.Table, QualityReport]:
     rows_in = table.num_rows
     issues: list[str] = []
 

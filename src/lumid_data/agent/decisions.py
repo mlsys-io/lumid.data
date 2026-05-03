@@ -33,7 +33,12 @@ def decide(descriptor: SourceDescriptor, modality: Modality) -> RoutingDecision:
         return _build(descriptor, modality, descriptor.policy.override_route)
     if descriptor.cadence == "batch" and modality in {"structured", "text"}:
         return _build(descriptor, modality, "delta")
-    if descriptor.cadence == "batch" and modality in {"image", "audio", "video", "blob"}:
+    if descriptor.cadence == "batch" and modality in {
+        "image",
+        "audio",
+        "video",
+        "blob",
+    }:
         return _build(descriptor, modality, "uc_volume_with_manifest")
     if descriptor.cadence == "batch" and modality == "timeseries":
         return _build(descriptor, modality, "timescale")
@@ -46,7 +51,9 @@ def decide(descriptor: SourceDescriptor, modality: Modality) -> RoutingDecision:
     )
 
 
-def _build(descriptor: SourceDescriptor, modality: Modality, route: Route) -> RoutingDecision:
+def _build(
+    descriptor: SourceDescriptor, modality: Modality, route: Route
+) -> RoutingDecision:
     namespace = _namespace(descriptor)
     table_name = _table_name(descriptor, modality)
     if route == "delta":

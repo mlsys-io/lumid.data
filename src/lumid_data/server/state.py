@@ -2,9 +2,9 @@
 
 from dataclasses import dataclass
 
-from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from ..catalog.flowmesh_governance import GovernanceClient
+from ..catalog.flowmesh_traces import FlowMeshTracesClient
 from ..catalog.nats_publisher import NatsPublisher
 from ..catalog.unity import UnityClient
 from ..sinks.delta import DeltaSinkConfig
@@ -20,5 +20,5 @@ class AppState:
     delta_cfg: DeltaSinkConfig
     dlq_cfg: DlqSinkConfig
     unity: UnityClient
-    governance: GovernanceClient
+    traces: FlowMeshTracesClient
     nats: NatsPublisher

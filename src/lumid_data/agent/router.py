@@ -14,7 +14,7 @@ to test). Replay = re-run `route()` with the same inputs.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pyarrow as pa
 
@@ -45,11 +45,13 @@ def route(
 
     The table is ``None`` when the route is DLQ (no usable data).
     """
-    received_at = datetime.now(timezone.utc)
+    received_at = datetime.now(UTC)
     resolved = modality.classify(payload, descriptor, mime_override=mime_override)
 
     try:
-        table = schema.infer(payload, resolved, mime_hint=mime_override or descriptor.mime_hint)
+        table = schema.infer(
+            payload, resolved, mime_hint=mime_override or descriptor.mime_hint
+        )
     except Exception as exc:
         logger.warning("schema inference failed for ingest_id=%s: %s", ingest_id, exc)
         plan = IngestPlan(

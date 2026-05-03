@@ -2,19 +2,21 @@
 
 import importlib
 import logging
+from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
-from typing import AsyncIterator
 
 from fastapi import FastAPI
 
-from ..catalog.flowmesh_governance import GovernanceClient
+from ..catalog.flowmesh_traces import FlowMeshTracesClient
 from ..catalog.nats_publisher import NatsPublisher
 from ..catalog.unity import UnityClient
 from ..db import Base, make_engine, make_sessionmaker
 from ..sinks.delta import DeltaSinkConfig
 from ..sinks.dlq import DlqSinkConfig
 from .config import load_settings
-from .routers import admin, catalog as catalog_router, health, ingest, sources
+from .routers import admin
+from .routers import catalog as catalog_router
+from .routers import health, ingest, sources
 from .state import AppState
 
 logger = logging.getLogger("lumid_data.server")
@@ -47,10 +49,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
 
     unity = UnityClient(base_url=settings.uc_base_url, token=settings.uc_token)
-    governance = GovernanceClient(
-        base_url=settings.flowmesh_governance_url,
-        token=settings.flowmesh_governance_token,
-        mode=settings.governance_mode,
+    traces = FlowMeshTracesClient(
+        base_url=settings.flowmesh_traces_url,
+        token=settings.flowmesh_traces_token,
     )
     nats = NatsPublisher(url=settings.nats_url)
     await nats.connect()
@@ -62,13 +63,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         delta_cfg=delta_cfg,
         dlq_cfg=dlq_cfg,
         unity=unity,
-        governance=governance,
+        traces=traces,
         nats=nats,
     )
     app.state.app_state = state
 
     plugin_stack = AsyncExitStack()
-    plugin_names = [name.strip() for name in settings.plugins.split(",") if name.strip()]
+    plugin_names = [
+        name.strip() for name in settings.plugins.split(",") if name.strip()
+    ]
     for name in plugin_names:
         module = importlib.import_module(name)
         installer = getattr(module, "install", None)

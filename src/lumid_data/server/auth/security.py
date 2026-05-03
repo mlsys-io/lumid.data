@@ -67,11 +67,15 @@ async def authenticate_bearer(
             return principal
     if last_exc is not None:
         raise last_exc
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+    )
 
 
 def require_scope(scope: str):
-    async def _dep(principal: PrincipalContext = Depends(authenticate_bearer)) -> PrincipalContext:
+    async def _dep(
+        principal: PrincipalContext = Depends(authenticate_bearer),
+    ) -> PrincipalContext:
         if "*" in principal.scopes or scope in principal.scopes:
             return principal
         raise HTTPException(

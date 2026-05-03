@@ -5,7 +5,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
     http_port: int = Field(9100, alias="LUMID_DATA_HTTP_PORT")
     log_level: str = Field("INFO", alias="LOG_LEVEL")
@@ -24,12 +26,13 @@ class Settings(BaseSettings):
 
     nats_url: str = Field(..., alias="NATS_URL")
 
-    flowmesh_governance_url: str | None = Field(None, alias="FLOWMESH_GOVERNANCE_URL")
-    flowmesh_governance_token: str | None = Field(None, alias="FLOWMESH_GOVERNANCE_TOKEN")
-    governance_mode: str = Field("live", alias="LUMID_DATA_GOVERNANCE_MODE")
+    flowmesh_traces_url: str | None = Field(None, alias="FLOWMESH_TRACES_URL")
+    flowmesh_traces_token: str | None = Field(None, alias="FLOWMESH_TRACES_TOKEN")
 
     plugins: str = Field("", alias="LUMID_DATA_PLUGINS")
-    lumid_oauth_introspect_url: str | None = Field(None, alias="LUMID_OAUTH_INTROSPECT_URL")
+    lumid_oauth_introspect_url: str | None = Field(
+        None, alias="LUMID_OAUTH_INTROSPECT_URL"
+    )
 
 
 def load_settings() -> Settings:

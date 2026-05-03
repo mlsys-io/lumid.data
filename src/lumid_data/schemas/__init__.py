@@ -12,9 +12,7 @@ from .descriptors import (
     SourceDescriptor,
     SourcePolicy,
 )
-from .lineage import (
-    Dataset as LineageDataset,
-)
+from .lineage import Dataset as LineageDataset
 from .lineage import (
     DatasetFacets,
     EventType,

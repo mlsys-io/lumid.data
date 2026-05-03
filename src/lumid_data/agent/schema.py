@@ -16,7 +16,7 @@ import hashlib
 import io
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pyarrow as pa
@@ -40,8 +40,10 @@ def fingerprint(schema: pa.Schema) -> str:
     return digest.hexdigest()[:16]
 
 
-def reconcile(inferred: pa.Schema, existing: pa.Schema | None) -> tuple[bool, list[str]]:
-    """Return (is_drift, issues). Additive-only is the default; caller decides what to do."""
+def reconcile(
+    inferred: pa.Schema, existing: pa.Schema | None
+) -> tuple[bool, list[str]]:
+    """Return (is_drift, issues). Additive-only by default; caller decides."""
     if existing is None:
         return False, []
     inferred_fields = {f.name: f.type for f in inferred}
@@ -51,9 +53,8 @@ def reconcile(inferred: pa.Schema, existing: pa.Schema | None) -> tuple[bool, li
         if name not in inferred_fields:
             issues.append(f"missing field in payload: {name}")
         elif inferred_fields[name] != t:
-            issues.append(
-                f"type mismatch on {name}: existing={t!r} payload={inferred_fields[name]!r}"
-            )
+            other = inferred_fields[name]
+            issues.append(f"type mismatch on {name}: existing={t!r} payload={other!r}")
     new_fields = set(inferred_fields) - set(existing_fields)
     if new_fields:
         issues.append(f"new fields (additive): {sorted(new_fields)}")
@@ -63,7 +64,11 @@ def reconcile(inferred: pa.Schema, existing: pa.Schema | None) -> tuple[bool, li
 
 def _infer_structured(payload: bytes, mime_hint: str | None) -> pa.Table:
     mime = (mime_hint or "").lower()
-    if mime in {"application/parquet", "application/x-parquet", "application/vnd.apache.parquet"}:
+    if mime in {
+        "application/parquet",
+        "application/x-parquet",
+        "application/vnd.apache.parquet",
+    }:
         return _parse_parquet(payload)
     if mime in {"application/json"}:
         return _parse_json_array(payload)
@@ -113,7 +118,7 @@ def _wrap_text(payload: bytes, mime_hint: str | None) -> pa.Table:
         {
             "content": payload.decode("utf-8", errors="replace"),
             "mime": (mime_hint or "text/plain"),
-            "ts": datetime.now(timezone.utc),
+            "ts": datetime.now(UTC),
         }
     ]
     return pa.Table.from_pylist(rows)

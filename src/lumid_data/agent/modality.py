@@ -35,7 +35,9 @@ def classify(
     if descriptor.modality != "auto":
         return descriptor.modality
 
-    mime = (mime_override or descriptor.mime_hint or "").lower().split(";", 1)[0].strip()
+    mime = (
+        (mime_override or descriptor.mime_hint or "").lower().split(";", 1)[0].strip()
+    )
     if mime:
         if mime in _STRUCTURED_MIMES:
             return "structured"
@@ -100,7 +102,9 @@ def _looks_like_csv(payload: bytes) -> bool:
     if len(lines) < 2:
         return False
     first_commas = lines[0].count(",")
-    return first_commas >= 1 and all(line.count(",") == first_commas for line in lines[1:])
+    return first_commas >= 1 and all(
+        line.count(",") == first_commas for line in lines[1:]
+    )
 
 
 def _looks_like_text(payload: bytes) -> bool:

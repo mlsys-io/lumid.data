@@ -12,12 +12,15 @@ through the descriptor's policy.
 
 import logging
 from dataclasses import dataclass
+from typing import Literal
 
 import pyarrow as pa
 from deltalake import write_deltalake
 from deltalake.exceptions import DeltaError
 
 logger = logging.getLogger(__name__)
+
+SchemaMode = Literal["merge", "overwrite"]
 
 
 @dataclass(frozen=True)
@@ -52,13 +55,13 @@ def write(
     table: pa.Table,
     *,
     partition_by: list[str] | None = None,
-    schema_mode: str = "merge",
+    schema_mode: SchemaMode = "merge",
 ) -> str:
     uri = table_uri(cfg, target_table)
     try:
         write_deltalake(
-            table_or_uri=uri,
-            data=table,
+            uri,
+            table,
             mode="append",
             schema_mode=schema_mode,
             partition_by=partition_by,

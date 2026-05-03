@@ -5,6 +5,10 @@ import pyarrow as pa
 from lumid_data.agent.schema import fingerprint, infer, reconcile
 
 
+def _schema(fields: dict[str, pa.DataType]) -> pa.Schema:
+    return pa.schema(fields)
+
+
 def test_csv_inference() -> None:
     table = infer(b"x,y\n1,2\n3,4\n", "structured", mime_hint="text/csv")
     assert set(table.column_names) == {"x", "y"}
@@ -26,28 +30,28 @@ def test_text_wraps_into_fixed_schema() -> None:
 
 
 def test_fingerprint_stable() -> None:
-    schema = pa.schema([("a", pa.int64()), ("b", pa.string())])
+    schema = _schema({"a": pa.int64(), "b": pa.string()})
     assert fingerprint(schema) == fingerprint(schema)
 
 
 def test_reconcile_no_existing_schema_is_not_drift() -> None:
-    new = pa.schema([("a", pa.int64())])
+    new = _schema({"a": pa.int64()})
     is_drift, issues = reconcile(new, None)
     assert is_drift is False
     assert issues == []
 
 
 def test_reconcile_additive_field_flagged() -> None:
-    existing = pa.schema([("a", pa.int64())])
-    new = pa.schema([("a", pa.int64()), ("b", pa.string())])
+    existing = _schema({"a": pa.int64()})
+    new = _schema({"a": pa.int64(), "b": pa.string()})
     is_drift, issues = reconcile(new, existing)
     assert is_drift is True
     assert any("new fields" in x for x in issues)
 
 
 def test_reconcile_type_mismatch_flagged() -> None:
-    existing = pa.schema([("a", pa.int64())])
-    new = pa.schema([("a", pa.string())])
+    existing = _schema({"a": pa.int64()})
+    new = _schema({"a": pa.string()})
     is_drift, issues = reconcile(new, existing)
     assert is_drift is True
     assert any("type mismatch" in x for x in issues)

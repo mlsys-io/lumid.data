@@ -29,7 +29,9 @@ def register(
     descriptor_file: Path = typer.Argument(..., help="YAML or JSON SourceDescriptor"),
 ) -> None:
     text = descriptor_file.read_text()
-    body = json.loads(text) if descriptor_file.suffix == ".json" else yaml.safe_load(text)
+    body = (
+        json.loads(text) if descriptor_file.suffix == ".json" else yaml.safe_load(text)
+    )
     with httpx.Client(timeout=10.0) as c:
         r = c.post(f"{_base_url()}/v1/sources", json=body, headers=_headers())
     if r.status_code >= 300:

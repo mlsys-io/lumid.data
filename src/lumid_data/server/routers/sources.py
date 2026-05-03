@@ -1,6 +1,6 @@
 """Source registry endpoints."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -35,7 +35,9 @@ async def register_source(
         partition_by=list(descriptor.partition_by),
         dedup_keys=list(descriptor.dedup_keys),
         policy=descriptor.policy.model_dump(),
-        pull_config=descriptor.pull_config.model_dump() if descriptor.pull_config else None,
+        pull_config=(
+            descriptor.pull_config.model_dump() if descriptor.pull_config else None
+        ),
         paused=descriptor.paused,
     )
     session.add(row)
@@ -82,7 +84,7 @@ async def pause_source(
     if row is None:
         raise HTTPException(status_code=404, detail="source not found")
     row.paused = True
-    row.updated_at = datetime.now(timezone.utc)
+    row.updated_at = datetime.now(UTC)
     await session.commit()
     return {"status": "paused"}
 
@@ -97,7 +99,7 @@ async def resume_source(
     if row is None:
         raise HTTPException(status_code=404, detail="source not found")
     row.paused = False
-    row.updated_at = datetime.now(timezone.utc)
+    row.updated_at = datetime.now(UTC)
     await session.commit()
     return {"status": "active"}
 

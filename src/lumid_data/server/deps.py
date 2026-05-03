@@ -1,6 +1,6 @@
 """FastAPI dependency wiring."""
 
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +13,8 @@ def get_state(request: Request) -> AppState:
     return state
 
 
-async def get_session(state: AppState = Depends(get_state)) -> AsyncIterator[AsyncSession]:
+async def get_session(
+    state: AppState = Depends(get_state),
+) -> AsyncIterator[AsyncSession]:
     async with state.sessionmaker() as session:
         yield session
