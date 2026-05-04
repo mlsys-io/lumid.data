@@ -42,9 +42,6 @@ class Settings(BaseSettings):
     agent_max_steps: int = Field(20, alias="LUMID_DATA_AGENT_MAX_STEPS")
 
     plugins: str = Field("", alias="LUMID_DATA_PLUGINS")
-    oidc_introspect_url: str | None = Field(
-        None, alias="OIDC_INTROSPECT_URL"
-    )
 
 
 def load_settings() -> Settings:

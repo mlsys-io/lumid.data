@@ -1,10 +1,10 @@
 """Bearer-token auth.
 
-OSS lumid.data ships **no DB-backed principals**. The plugin chain in
+lumid.data ships **no DB-backed principals**. The plugin chain in
 ``IDENTITY_PROVIDERS`` resolves a bearer token to a ``PrincipalContext``
-when configured (e.g. the OIDC introspector). With no provider
-registered, auth is a no-op and any request is treated as the default
-admin principal. This matches local-dev shape.
+when configured (e.g. an OAuth/OIDC introspection plugin). With no
+provider registered, auth is a no-op and any request is treated as the
+default admin principal — local-dev shape.
 """
 
 import logging

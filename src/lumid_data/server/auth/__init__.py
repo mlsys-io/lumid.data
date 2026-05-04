@@ -1,4 +1,4 @@
-"""Auth: PrincipalContext, bearer resolution, identity plugin shape."""
+"""Auth: PrincipalContext, bearer resolution, identity-provider plugin shape."""
 
 from .security import (
     ALLOWED_SCOPES,

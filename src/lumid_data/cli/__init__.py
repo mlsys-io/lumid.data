@@ -1,4 +1,4 @@
-"""``lumid-data`` typer CLI (compose-shaped)."""
+"""``lumid-data`` typer CLI."""
 
 from .main import app, main
 

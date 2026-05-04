@@ -1,4 +1,4 @@
-"""``lumid-data stack`` — local docker-compose lifecycle (compose-shaped).
+"""``lumid-data stack`` — local docker-compose lifecycle.
 
 Subcommands map straight to ``docker compose`` against the repo-root
 ``docker-compose.yml``. Profiles are passed through with ``--profile``.

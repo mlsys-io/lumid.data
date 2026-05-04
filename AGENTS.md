@@ -28,7 +28,7 @@ backdoor — the agent uses the same URLs a direct client would.
    └──────────────┬──────────────────────────────┘
                   ▼
    ┌─────────────────────────────────────────────────────────┐
-   │  lumid.data  FastAPI (port 9100, OIDC gated)     │
+   │  lumid.data  FastAPI (port 9100, bearer-token gated)    │
    │   /db/v1/*       → reverse-proxy to PostgREST sidecar   │
    │   /storage/v1/*  → boto3 over MinIO (sign / put / get)  │
    │   /sql/v1        → psycopg passthrough (role-scoped)    │
@@ -55,7 +55,6 @@ backdoor — the agent uses the same URLs a direct client would.
 | `src/lumid_data/server/routers/` | health, db_proxy, storage, sql, streams, agent, admin, mcp_mount |
 | `src/lumid_data/server/services/` | postgrest_jwt, audit, s3 |
 | `src/lumid_data/server/auth/security.py` | bearer chain + scopes |
-| `src/lumid_data/auth/introspect.py` | OIDC plugin |
 | `src/lumid_data/streams/` | webhook + websocket + kafka adapters, sinks, supervised runner |
 | `src/lumid_data/agent/` | provider-agnostic tool-use runner + tool catalog |
 | `src/lumid_data/agent/providers/` | anthropic / openai / openai_compat |
@@ -76,7 +75,7 @@ backdoor — the agent uses the same URLs a direct client would.
 | Audit fan-out | NATS (optional) |
 | LLM | Anthropic / OpenAI / OpenAI-compatible (Ollama, vLLM, …) |
 | Agent protocol | MCP (Model Context Protocol) for tool exposure |
-| Identity | OIDC (`/introspect`) |
+| Identity | bearer-token chain; OAuth/OIDC introspection via plugin |
 
 ## Setup
 
@@ -90,16 +89,17 @@ uv run lumid-data stack up                # full local stack
 
 ## Hook Plugin Extension Points
 
-Same contract as identity-provider. Plugins are Python modules with a
-top-level `install()` (sync or `@asynccontextmanager async def`).
-Loaded from `LUMID_DATA_PLUGINS` env var (CSV of importable module
-names) at FastAPI lifespan startup.
+Plugins are Python modules with a top-level `install()` (sync or
+`@asynccontextmanager async def`). Loaded from `LUMID_DATA_PLUGINS` env
+var (CSV of importable module names) at FastAPI lifespan startup.
 
 - `IdentityProvider` — resolve a bearer token to a principal
   (`server/auth/security.py`).
 
-(internal note): `IdentityProvider` in
-`auth/introspect.py` mirrors the IdentityProvider Protocol.
+External OAuth/OIDC providers are integrated via `IdentityProvider`
+plugins loaded at runtime through `LUMID_DATA_PLUGINS=<module.name>`.
+With no plugin registered, the bearer chain is a no-op and any request
+is treated as the default admin (OSS local-dev shape).
 
 ## API Reference (`http://localhost:9100`)
 
@@ -188,7 +188,6 @@ to `.env.example` at the repo root.
 | `LUMID_DATA_LLM_BASE_URL` | – | base URL for `openai_compat` |
 | `LUMID_DATA_AGENT_MAX_STEPS` | `20` | tool-use loop budget |
 | `KAFKA_BOOTSTRAP` | – | Redpanda/Kafka bootstrap; required only for kafka-transport streams |
-| `OIDC_INTROSPECT_URL` | – | lumid introspect endpoint |
 | `LUMID_DATA_PLUGINS` | – | CSV of plugin module names |
 | `LOG_LEVEL` | `INFO` | log level |
 
