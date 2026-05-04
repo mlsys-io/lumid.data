@@ -21,3 +21,4 @@ class AppState:
     postgrest_jwt: PostgrestJwtConfig
     audit: AuditWriter
     llm_adapter: Any = None  # LLMAdapter; populated when /agent ships
+    stream_runner: Any = None  # streams.StreamRunner

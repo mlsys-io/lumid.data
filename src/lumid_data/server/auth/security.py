@@ -23,6 +23,9 @@ ALLOWED_SCOPES: set[str] = {
     "sql:write",
     "agent:run",
     "admin:audit",
+    "streams:read",
+    "streams:write",
+    "ingest:write",
 }
 
 _DEFAULT_ADMIN = "default-admin"

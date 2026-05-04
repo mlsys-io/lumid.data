@@ -9,8 +9,18 @@ from fastapi import FastAPI
 
 from ..agent import make_adapter
 from ..db import Base, make_engine, make_sessionmaker
+from ..streams.runner import StreamRunner
 from .config import load_settings
-from .routers import admin, agent, db_proxy, health, mcp_mount, sql, storage
+from .routers import (
+    admin,
+    agent,
+    db_proxy,
+    health,
+    mcp_mount,
+    sql,
+    storage,
+    streams,
+)
 from .services.audit import AuditWriter, connect_nats
 from .services.postgrest_jwt import PostgrestJwtConfig
 from .services.s3 import S3Config
@@ -61,6 +71,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             base_url=settings.llm_base_url,
         )
 
+    stream_runner = StreamRunner(
+        sessionmaker=sessionmaker,
+        engine=engine,
+        s3_client=s3_client,
+        kafka_bootstrap_default=settings.kafka_bootstrap,
+    )
+
     state = AppState(
         settings=settings,
         engine=engine,
@@ -70,9 +87,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         postgrest_jwt=postgrest_jwt,
         audit=audit,
         llm_adapter=llm_adapter,
+        stream_runner=stream_runner,
     )
     state._fastapi_app = app  # type: ignore[attr-defined]
     app.state.app_state = state
+
+    await stream_runner.start_all_active()
 
     plugin_stack = AsyncExitStack()
     plugin_names = [
@@ -92,6 +112,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        await stream_runner.stop_all()
         await plugin_stack.aclose()
         if nats_client is not None:
             await nats_client.drain()
@@ -123,6 +144,7 @@ def create_app() -> FastAPI:
     app.include_router(db_proxy.router)
     app.include_router(storage.router)
     app.include_router(sql.router)
+    app.include_router(streams.router)
     app.include_router(agent.router)
     app.include_router(admin.router)
 

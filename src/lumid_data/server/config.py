@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     postgrest_admin_role: str = Field("app_admin", alias="POSTGREST_ADMIN_ROLE")
 
     nats_url: str | None = Field(None, alias="NATS_URL")
+    kafka_bootstrap: str | None = Field(None, alias="KAFKA_BOOTSTRAP")
 
     llm_provider: LLMProvider = Field("anthropic", alias="LUMID_DATA_LLM_PROVIDER")
     llm_model: str = Field("claude-sonnet-4-6", alias="LUMID_DATA_LLM_MODEL")

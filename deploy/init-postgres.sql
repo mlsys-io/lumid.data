@@ -1,11 +1,14 @@
--- Postgres bootstrap for lumid.data: roles, database, and the lumid_data_meta schema.
+-- Postgres bootstrap for lumid.data: roles, database, lumid_data_meta schema,
+-- and the timescaledb extension (used opt-in per stream for hypertables).
 --
--- This file is mounted into postgres:16-alpine's docker-entrypoint-initdb.d/
+-- This file is mounted into the postgres image's docker-entrypoint-initdb.d/
 -- and runs once on first startup of the volume.
 
 CREATE DATABASE lumid_data;
 
 \connect lumid_data
+
+CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 -- Roles. PostgREST uses a JWT-issued ``role`` claim to switch session role;
 -- our PostgrestJwtConfig maps PrincipalContext scopes to one of these.
