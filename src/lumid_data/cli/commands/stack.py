@@ -1,9 +1,8 @@
 """``lumid-data stack`` — local docker-compose lifecycle (compose-shaped).
 
-Subcommands map straight to ``docker compose`` against
-``deploy/docker-compose.yml``. Profiles are passed through with
-``--profile``. Pre/post hooks live in ``orchestrate.py`` (e.g. UC
-namespace bootstrap on ``up``); bare ``docker compose up -d`` works too.
+Subcommands map straight to ``docker compose`` against the repo-root
+``docker-compose.yml``. Profiles are passed through with ``--profile``.
+Bare ``docker compose up -d`` from the repo root works the same.
 """
 
 import shutil
@@ -19,12 +18,10 @@ app = typer.Typer(no_args_is_help=True, add_completion=False)
 def _compose_dir() -> Path:
     here = Path(__file__).resolve()
     for parent in here.parents:
-        candidate = parent / "deploy" / "docker-compose.yml"
+        candidate = parent / "docker-compose.yml"
         if candidate.exists():
             return candidate.parent
-    raise typer.BadParameter(
-        "deploy/docker-compose.yml not found relative to the package."
-    )
+    raise typer.BadParameter("docker-compose.yml not found at the repo root.")
 
 
 def _docker_compose() -> str:

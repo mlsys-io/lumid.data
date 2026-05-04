@@ -14,15 +14,16 @@ A **data management service** with two surfaces under one URL:
 # Install
 uv sync --extra dev
 
-# Bring up Postgres + MinIO + PostgREST + lumid.data
-cd deploy && docker compose up -d
+# Bring up TimescaleDB + MinIO + Redpanda + PostgREST + lumid.data
+cp .env.example .env       # then edit values
+docker compose up -d
 
 # ...or via the CLI
 uv run lumid-data stack up
 ```
 
 The service comes up at `http://127.0.0.1:9100` (`/docs` for the OpenAPI
-browser). Set `LUMID_DATA_LLM_API_KEY` in `deploy/.env` to unlock
+browser). Set `LUMID_DATA_LLM_API_KEY` in `.env` to unlock
 `/agent/v1`.
 
 ```bash

@@ -63,7 +63,7 @@ backdoor — the agent uses the same URLs a direct client would.
 | `src/lumid_data/db/` | SQLAlchemy models for `lumid_data_meta` |
 | `src/lumid_data/client/` | HTTP SDK for direct or app-side use |
 | `src/lumid_data/cli/` | `lumid-data {stack,sql,storage,agent,admin}` |
-| `deploy/` | one-click `docker compose up -d` |
+| `Dockerfile`, `docker-compose.yml`, `.env.example` | one-click `docker compose up -d` (root); `deploy/init-postgres.sql` is mounted by the postgres service |
 
 ## OSS stack
 
@@ -168,7 +168,7 @@ lumid-data healthz
 ## Environment Variables
 
 Canonical declared set in `src/lumid_data/server/config.py`, mirrored
-to `deploy/.env.example`.
+to `.env.example` at the repo root.
 
 | Variable | Default | Description |
 |----------|---------|-------------|

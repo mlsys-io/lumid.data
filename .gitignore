@@ -43,7 +43,6 @@ htmlcov/
 .env.local
 .env.*.local
 .env.bak
-deploy/.env
 
 # Scratch / agent space (matches upstream convention)
 agent_space/

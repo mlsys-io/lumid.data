@@ -1,6 +1,6 @@
 # One-click data management service.
 #
-#   cd deploy && docker compose up -d
+#   docker compose up -d
 #
 # Brings up Postgres, MinIO, the PostgREST sidecar that backs /db, and
 # the lumid.data app itself. NATS is opt-in (set NATS_URL in .env to
@@ -27,7 +27,7 @@ services:
       POSTGRES_DB: postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init-postgres.sql:/docker-entrypoint-initdb.d/00_init.sql:ro
+      - ./deploy/init-postgres.sql:/docker-entrypoint-initdb.d/00_init.sql:ro
     networks: [lumid_net]
     ports: ["5432:5432"]
     healthcheck:
@@ -113,8 +113,8 @@ services:
 
   app:
     build:
-      context: ..
-      dockerfile: deploy/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     image: lumid-data:dev
     restart: unless-stopped
     env_file:
