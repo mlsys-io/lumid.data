@@ -203,6 +203,27 @@ to `.env.example` at the repo root.
 - Default to no comments. Comment only when *why* is non-obvious.
 - No back-compat shims when updating code; replace outright.
 
+## Repo Boundaries
+
+`lumid.data` is OSS-shaped and stands on its own. Upstream consumers
+and proprietary plugins must not appear in this repo — code, docs,
+comments, env-var examples, identifiers, or commit messages.
+
+- **No upstream-consumer names.** Do not reference any project that
+  *consumes* lumid.data (e.g. compute engines, workflow optimizers).
+  Style decisions stand on their own (`Enforced: B113, B202, …`), not
+  framed as "matches X" or "X parity."
+- **No proprietary plugins.** Identity providers, lineage sinks, and
+  similar are loaded at runtime via `LUMID_DATA_PLUGINS=<module>` from
+  out-of-tree packages. The plugin module name is a deploy-time
+  config; it never appears in this repo's source.
+- **Neutral plugin language.** Describe extension points by their
+  Protocol (e.g. `IdentityProvider` resolves a bearer token to a
+  `PrincipalContext`), not by a specific implementation.
+
+A history rewrite was performed once to enforce this; future code
+must keep history clean by following these rules at write time.
+
 ## Security Rules (bandit-enforced)
 
 Enforced: B113, B202, B310, B324, B506, B607, B614, B701, B108.
@@ -222,5 +243,5 @@ PR title format: `type(scope): description`. Allowed types:
 `feat, fix, refactor, chore, test, perf, build, ci, docs`. Prefix
 `[BREAKING]` for breaking changes.
 
-(internal note): never post to GitHub
-(open PR / comment / reply) without explicit user approval.
+Never open / comment on / reply to a GitHub PR without explicit user
+approval. Pushing commits to a feature branch is fine.
