@@ -1,0 +1,112 @@
+[project]
+name = "lumid-data"
+version = "0.1.0"
+description = "Data management service for the lumid stack: REST CRUD over Postgres + S3 plus an LLM-driven data agent and MCP."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "fastapi>=0.120.3",
+    "uvicorn[standard]>=0.32.1",
+    "pydantic>=2.12.3",
+    "pydantic-settings>=2.6.0",
+    "httpx>=0.28.1",
+    "httpx-sse>=0.4.0",
+    "python-multipart>=0.0.26",
+    "sqlalchemy>=2.0.44",
+    "psycopg[binary]>=3.2.12",
+    "alembic>=1.14.0",
+    "boto3>=1.41.5",
+    "anthropic>=0.40.0",
+    "openai>=1.55.0",
+    "mcp>=1.2.0",
+    "nats-py>=2.9.0",
+    "pyjwt>=2.10.0",
+    "typer>=0.15.0",
+    "rich>=14.2.0",
+    "pyyaml>=6.0.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=25.12.0",
+    "codespell>=2.4.1",
+    "isort>=7.0.0",
+    "moto>=5.0.0",
+    "mypy>=1.19.1",
+    "pre-commit>=4.5.1",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.3.0",
+    "respx>=0.22.0",
+    "ruff>=0.14.10",
+    "types-pyyaml>=6.0.12.20250915",
+]
+
+[project.scripts]
+lumid-data = "lumid_data.cli.main:app"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.isort]
+profile = "black"
+
+[tool.black]
+target-version = ["py312"]
+
+[tool.ruff]
+target-version = "py312"
+lint.select = ["E", "F", "UP", "I"]
+lint.ignore = ["I001"]
+extend-exclude = ["__init__.pyi"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src", "tests"]
+ignore_missing_imports = false
+warn_unused_configs = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = [
+    "anthropic",
+    "anthropic.types",
+    "boto3",
+    "botocore.exceptions",
+    "mcp",
+    "mcp.server",
+    "mcp.server.lowlevel",
+    "mcp.types",
+    "nats",
+    "nats.aio.client",
+    "openai",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.bandit]
+exclude_dirs = ["tests", "agent_space"]
+skips = [
+    "B101",  # assert: internal invariants, not shipped with -O
+    "B104",  # 0.0.0.0 bind: containerized; exposure controlled at orchestration
+    "B107",  # password default: placeholder, not a real credential
+    "B110",  # try/except/pass: best-effort cleanup paths
+    "B112",  # try/except/continue: iteration over partially-bad inputs
+    "B311",  # random: non-cryptographic sampling / jitter / tie-breaking
+    "B404",  # subprocess module import: actual unsafe patterns caught by B602/B603/B607
+    "B603",  # subprocess.run with argv list: no shell=True, audited per-site
+]
+
+[tool.codespell]
+skip = "*.lock,*.svg,*.po,*.json,*.yaml,*.yml,deploy/*,*.toml"
+ignore-words-list = "lumid,postgrest"

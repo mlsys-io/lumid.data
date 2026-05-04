@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+.installed.cfg
+
+# Virtual envs
+.venv/
+venv/
+env/
+ENV/
+
+# uv
+.python-version-local
+
+# Type checkers / linters / coverage
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Local env files
+.env
+.env.local
+.env.*.local
+.env.bak
+deploy/.env
+
+# Scratch / agent space (matches upstream convention)
+agent_space/
+*.bak
+*.tmp
+results/
+results-*/
+scratch/
+
+# Build artifacts
+*.log
+*.pid
+
+# Secrets
+credentials.toml
+credentials.json
+*.pem
+*.key
