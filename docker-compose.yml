@@ -27,7 +27,7 @@ services:
       POSTGRES_DB: postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./deploy/init-postgres.sql:/docker-entrypoint-initdb.d/00_init.sql:ro
+      - ./scripts/init-postgres.sql:/docker-entrypoint-initdb.d/00_init.sql:ro
     networks: [lumid_net]
     ports: ["5432:5432"]
     healthcheck:
