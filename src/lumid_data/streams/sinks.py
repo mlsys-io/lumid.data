@@ -61,14 +61,14 @@ async def ensure_postgres_landing(sink: dict[str, Any], engine: AsyncEngine) -> 
     schema = _quote_ident(sink.get("schema", "public"))
     table = _quote_ident(sink["table"])
     fq = f"{schema}.{table}"
-    create = f"""
-        CREATE TABLE IF NOT EXISTS {fq} (
-            received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            payload JSONB NOT NULL,
-            headers JSONB NOT NULL DEFAULT '{{}}'::jsonb,
-            stream_offset JSONB NOT NULL DEFAULT '{{}}'::jsonb
-        );
-    """
+    create = (  # nosec B608 — schema/table go through _quote_ident
+        f"CREATE TABLE IF NOT EXISTS {fq} ("
+        " received_at TIMESTAMPTZ NOT NULL DEFAULT now(),"
+        " payload JSONB NOT NULL,"
+        " headers JSONB NOT NULL DEFAULT '{}'::jsonb,"
+        " stream_offset JSONB NOT NULL DEFAULT '{}'::jsonb"
+        ");"
+    )
     async with engine.begin() as conn:
         await conn.execute(text(create))
         if sink.get("hypertable"):
@@ -91,10 +91,9 @@ async def _write_postgres(
 ) -> None:
     schema = _quote_ident(sink.get("schema", "public"))
     table = _quote_ident(sink["table"])
-    stmt = text(
-        f"INSERT INTO {schema}.{table} (payload, headers, stream_offset) "
-        f"VALUES (:payload, :headers, :offset)"
-    ).bindparams(
+    sql_head = f"INSERT INTO {schema}.{table} (payload, headers, stream_offset) "  # nosec B608 — _quote_ident whitelists identifiers
+    sql_tail = "VALUES (:payload, :headers, :offset)"
+    stmt = text(sql_head + sql_tail).bindparams(
         payload=json.dumps(msg.payload),
         headers=json.dumps(msg.headers),
         offset=json.dumps(msg.offset),

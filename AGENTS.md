@@ -52,10 +52,11 @@ backdoor — the agent uses the same URLs a direct client would.
 | Path | Purpose |
 |------|---------|
 | `src/lumid_data/server/main.py` | FastAPI app + lifespan |
-| `src/lumid_data/server/routers/` | health, db_proxy, storage, sql, agent, admin, mcp_mount |
+| `src/lumid_data/server/routers/` | health, db_proxy, storage, sql, streams, agent, admin, mcp_mount |
 | `src/lumid_data/server/services/` | postgrest_jwt, audit, s3 |
 | `src/lumid_data/server/auth/security.py` | bearer chain + scopes |
 | `src/lumid_data/auth/introspect.py` | OIDC plugin |
+| `src/lumid_data/streams/` | webhook + websocket + kafka adapters, sinks, supervised runner |
 | `src/lumid_data/agent/` | provider-agnostic tool-use runner + tool catalog |
 | `src/lumid_data/agent/providers/` | anthropic / openai / openai_compat |
 | `src/lumid_data/mcp_server/` | builds MCP server over the FastAPI app |
@@ -68,9 +69,10 @@ backdoor — the agent uses the same URLs a direct client would.
 
 | Slot | Choice |
 |------|--------|
-| Database | PostgreSQL 16 |
+| Database | TimescaleDB on PostgreSQL 16 (hypertables opt-in per stream) |
 | DB REST gateway | PostgREST OSS (sidecar) |
 | Object store | MinIO (S3-compatible) |
+| Streaming bus | Redpanda (Kafka API; only needed for kafka-transport streams) |
 | Audit fan-out | NATS (optional) |
 | LLM | Anthropic / OpenAI / OpenAI-compatible (Ollama, vLLM, …) |
 | Agent protocol | MCP (Model Context Protocol) for tool exposure |
@@ -110,6 +112,13 @@ names) at FastAPI lifespan startup.
 | POST | `/storage/v1/upload/sign/{bucket}/{path}` | presigned PUT |
 | GET | `/storage/v1/list/{bucket}` | list objects |
 | POST | `/sql/v1` | run a single SQL statement |
+| POST | `/v1/streams` | register a stream descriptor |
+| GET | `/v1/streams` / `/v1/streams/{id}` | list / get |
+| POST | `/v1/streams/{id}/state` | activate / pause / stop |
+| GET | `/v1/streams/{id}/status` | last run + lag |
+| POST | `/v1/ingest/{id}` | webhook push |
+| WS | `/v1/ingest/ws/{id}` | websocket push |
+| GET | `/v1/streams/{id}/dlq` / `POST .../dlq/{dlq_id}/replay` | DLQ |
 | POST | `/agent/v1` | streamed agent tool-use (SSE) |
 | GET | `/mcp` | MCP server (streamable HTTP) |
 | GET | `/v1/admin/audit` / `/v1/admin/runs` | audit + agent-run views |
@@ -118,6 +127,9 @@ names) at FastAPI lifespan startup.
 
 - `aud-` audit_log rows
 - `run-` agent_runs
+- `str-` stream_sources rows
+- `srn-` stream_runs rows
+- `dlq-` stream_dlq rows
 
 ID factories live in `src/lumid_data/utils/ids.py`.
 
@@ -175,6 +187,7 @@ to `deploy/.env.example`.
 | `LUMID_DATA_LLM_API_KEY` | – | provider API key |
 | `LUMID_DATA_LLM_BASE_URL` | – | base URL for `openai_compat` |
 | `LUMID_DATA_AGENT_MAX_STEPS` | `20` | tool-use loop budget |
+| `KAFKA_BOOTSTRAP` | – | Redpanda/Kafka bootstrap; required only for kafka-transport streams |
 | `OIDC_INTROSPECT_URL` | – | lumid introspect endpoint |
 | `LUMID_DATA_PLUGINS` | – | CSV of plugin module names |
 | `LOG_LEVEL` | `INFO` | log level |
