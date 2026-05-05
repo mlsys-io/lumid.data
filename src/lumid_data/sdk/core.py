@@ -1,10 +1,4 @@
-"""lumid.data client SDK.
-
-Thin HTTP wrapper around the unified URL — one method per surface.
-The client is intentionally surface-faithful: the Supabase-shaped
-``/db?id=eq.1`` filter syntax flows through verbatim; a Pythonic
-helper layer can sit on top later.
-"""
+"""lumid.data SDK — thin HTTP wrapper, one method per surface."""
 
 import json
 import logging

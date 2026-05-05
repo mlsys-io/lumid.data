@@ -1,4 +1,4 @@
-"""HTTP client SDK for lumid.data — sync ``Client`` + async ``AsyncClient``."""
+"""HTTP SDK for lumid.data — sync ``Client`` + async ``AsyncClient``."""
 
 from .core import AsyncClient, Client, ClientError, Credentials
 

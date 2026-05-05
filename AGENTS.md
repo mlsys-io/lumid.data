@@ -60,7 +60,7 @@ backdoor — the agent uses the same URLs a direct client would.
 | `src/lumid_data/agent/providers/` | anthropic / openai / openai_compat |
 | `src/lumid_data/mcp_server/` | builds MCP server over the FastAPI app |
 | `src/lumid_data/db/` | SQLAlchemy models for `lumid_data_meta` |
-| `src/lumid_data/client/` | HTTP SDK for direct or app-side use |
+| `src/lumid_data/sdk/` | HTTP SDK for direct or app-side use |
 | `src/lumid_data/cli/` | `lumid-data {stack,sql,storage,agent,admin}` |
 | `Dockerfile`, `docker-compose.yml`, `.env.example` | one-click `docker compose up -d` (root); `scripts/init-postgres.sql` is mounted by the postgres service |
 
@@ -133,10 +133,10 @@ is treated as the default admin (OSS local-dev shape).
 
 ID factories live in `src/lumid_data/utils/ids.py`.
 
-## SDK Usage (`lumid_data.client`)
+## SDK Usage (`lumid_data.sdk`)
 
 ```python
-from lumid_data.client import Client
+from lumid_data.sdk import Client
 
 client = Client(base_url="http://localhost:9100", token=os.environ["LUMID_TOKEN"])
 
