@@ -27,6 +27,7 @@ dependencies = [
     "typer>=0.15.0",
     "rich>=14.2.0",
     "pyyaml>=6.0.2",
+    "lumid-data-sdk",
 ]
 
 [project.optional-dependencies]
@@ -57,6 +58,13 @@ package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
+namespaces = true
+
+[tool.uv.workspace]
+members = ["sdk"]
+
+[tool.uv.sources]
+lumid-data-sdk = { workspace = true }
 
 [tool.isort]
 profile = "black"
@@ -72,9 +80,11 @@ extend-exclude = ["__init__.pyi"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["src", "tests"]
+files = ["src", "sdk/src", "tests"]
 ignore_missing_imports = false
 warn_unused_configs = true
+explicit_package_bases = true
+mypy_path = ["src", "sdk/src"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
