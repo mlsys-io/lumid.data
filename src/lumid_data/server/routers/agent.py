@@ -4,7 +4,7 @@ import json
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -12,7 +12,6 @@ from ...agent import build_dispatcher_from_app, build_tool_catalog
 from ...agent import run as run_agent
 from ...db.models import AgentRun
 from ...utils.ids import new_run_id
-from ..auth.security import PrincipalContext, require_scope
 from ..deps import get_state
 from ..services.audit import now_ms
 from ..state import AppState
@@ -34,8 +33,6 @@ class AgentRequest(BaseModel):
 async def run_agent_endpoint(
     body: AgentRequest,
     state: AppState = Depends(get_state),
-    principal: PrincipalContext = Depends(require_scope("agent:run")),
-    authorization: str | None = Header(default=None),
 ) -> StreamingResponse:
     if state.llm_adapter is None:
         raise HTTPException(
@@ -43,7 +40,6 @@ async def run_agent_endpoint(
             detail="LLM adapter not configured",
         )
     settings = state.settings
-    bearer = (authorization or "").removeprefix("Bearer ").strip() or None
     run_id = new_run_id()
     started = now_ms()
 
@@ -51,7 +47,6 @@ async def run_agent_endpoint(
         async with state.sessionmaker() as session:
             row = AgentRun(
                 id=run_id,
-                principal_id=principal.principal_id,
                 provider=settings.llm_provider,
                 model=body.model or settings.llm_model,
                 goal=body.goal,
@@ -68,7 +63,7 @@ async def run_agent_endpoint(
         else:
             tools = all_tools
         dispatcher = build_dispatcher_from_app(
-            app, base_url=settings.base_url, bearer=bearer
+            app, base_url=settings.base_url, bearer=None
         )
         emitted_done: dict | None = None
         try:
@@ -108,7 +103,6 @@ async def run_agent_endpoint(
                 await session.commit()
 
         await state.audit.record(
-            principal=principal,
             surface="agent",
             op="POST",
             path="/agent/v1",

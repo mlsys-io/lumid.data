@@ -41,8 +41,6 @@ class Settings(BaseSettings):
     llm_base_url: str | None = Field(None, alias="LUMID_DATA_LLM_BASE_URL")
     agent_max_steps: int = Field(20, alias="LUMID_DATA_AGENT_MAX_STEPS")
 
-    plugins: str = Field("", alias="LUMID_DATA_PLUGINS")
-
 
 def load_settings() -> Settings:
     return Settings()  # type: ignore[call-arg]

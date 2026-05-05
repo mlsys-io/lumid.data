@@ -14,7 +14,7 @@ one unified URL:
    directly.
 2. **LLM-driven data agent** — `/agent/v1` runs a tool-use loop over
    the same CRUD endpoints; `/mcp` exposes the same tools to any MCP
-   client. Same auth, same audit log.
+   client. Same audit log.
 
 The agent is **chat-with-data** (Snowflake Cortex / Databricks Genie
 lane): an LLM orchestrates the CRUD calls. There is no privileged
@@ -28,10 +28,10 @@ backdoor — the agent uses the same URLs a direct client would.
    └──────────────┬──────────────────────────────┘
                   ▼
    ┌─────────────────────────────────────────────────────────┐
-   │  lumid.data  FastAPI (port 9100, bearer-token gated)    │
+   │  lumid.data  FastAPI (port 9100)                        │
    │   /db/v1/*       → reverse-proxy to PostgREST sidecar   │
    │   /storage/v1/*  → boto3 over MinIO (sign / put / get)  │
-   │   /sql/v1        → psycopg passthrough (role-scoped)    │
+   │   /sql/v1        → psycopg passthrough (admin role)     │
    │   /agent/v1      → LLM tool-use loop, SSE streaming     │
    │   /mcp           → MCP server (CRUD endpoints as tools) │
    │   /v1/admin/*    → audit_log + agent_runs read views    │
@@ -54,7 +54,6 @@ backdoor — the agent uses the same URLs a direct client would.
 | `src/lumid_data/server/main.py` | FastAPI app + lifespan |
 | `src/lumid_data/server/routers/` | health, db_proxy, storage, sql, streams, agent, admin, mcp_mount |
 | `src/lumid_data/server/services/` | postgrest_jwt, audit, s3 |
-| `src/lumid_data/server/auth/security.py` | bearer chain + scopes |
 | `src/lumid_data/streams/` | webhook + websocket + kafka adapters, sinks, supervised runner |
 | `src/lumid_data/agent/` | provider-agnostic tool-use runner + tool catalog |
 | `src/lumid_data/agent/providers/` | anthropic / openai / openai_compat |
@@ -75,7 +74,6 @@ backdoor — the agent uses the same URLs a direct client would.
 | Audit fan-out | NATS (optional) |
 | LLM | Anthropic / OpenAI / OpenAI-compatible (Ollama, vLLM, …) |
 | Agent protocol | MCP (Model Context Protocol) for tool exposure |
-| Identity | bearer-token chain; OAuth/OIDC introspection via plugin |
 
 ## Setup
 
@@ -86,20 +84,6 @@ uv run pre-commit run --all-files         # before any commit
 uv run pytest tests/                      # unit tests
 uv run lumid-data stack up                # full local stack
 ```
-
-## Hook Plugin Extension Points
-
-Plugins are Python modules with a top-level `install()` (sync or
-`@asynccontextmanager async def`). Loaded from `LUMID_DATA_PLUGINS` env
-var (CSV of importable module names) at FastAPI lifespan startup.
-
-- `IdentityProvider` — resolve a bearer token to a principal
-  (`server/auth/security.py`).
-
-External OAuth/OIDC providers are integrated via `IdentityProvider`
-plugins loaded at runtime through `LUMID_DATA_PLUGINS=<module.name>`.
-With no plugin registered, the bearer chain is a no-op and any request
-is treated as the default admin (OSS local-dev shape).
 
 ## API Reference (`http://localhost:9100`)
 
@@ -138,7 +122,7 @@ ID factories live in `src/lumid_data/utils/ids.py`.
 ```python
 from lumid_data.sdk import Client
 
-client = Client(base_url="http://localhost:9100", token=os.environ["LUMID_TOKEN"])
+client = Client(base_url="http://localhost:9100")
 
 # /db
 rows = client.db_select("users", id="eq.1")
@@ -188,7 +172,6 @@ to `.env.example` at the repo root.
 | `LUMID_DATA_LLM_BASE_URL` | – | base URL for `openai_compat` |
 | `LUMID_DATA_AGENT_MAX_STEPS` | `20` | tool-use loop budget |
 | `KAFKA_BOOTSTRAP` | – | Redpanda/Kafka bootstrap; required only for kafka-transport streams |
-| `LUMID_DATA_PLUGINS` | – | CSV of plugin module names |
 | `LOG_LEVEL` | `INFO` | log level |
 
 ## Code Style
@@ -206,20 +189,13 @@ to `.env.example` at the repo root.
 ## Repo Boundaries
 
 `lumid.data` is OSS-shaped and stands on its own. Upstream consumers
-and proprietary plugins must not appear in this repo — code, docs,
-comments, env-var examples, identifiers, or commit messages.
+must not appear in this repo — code, docs, comments, env-var examples,
+identifiers, or commit messages.
 
 - **No upstream-consumer names.** Do not reference any project that
   *consumes* lumid.data (e.g. compute engines, workflow optimizers).
   Style decisions stand on their own (`Enforced: B113, B202, …`), not
   framed as "matches X" or "X parity."
-- **No proprietary plugins.** Identity providers, lineage sinks, and
-  similar are loaded at runtime via `LUMID_DATA_PLUGINS=<module>` from
-  out-of-tree packages. The plugin module name is a deploy-time
-  config; it never appears in this repo's source.
-- **Neutral plugin language.** Describe extension points by their
-  Protocol (e.g. `IdentityProvider` resolves a bearer token to a
-  `PrincipalContext`), not by a specific implementation.
 
 A history rewrite was performed once to enforce this; future code
 must keep history clean by following these rules at write time.

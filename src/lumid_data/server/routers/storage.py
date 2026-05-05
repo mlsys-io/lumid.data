@@ -11,7 +11,6 @@ from lumid_data.sdk.schemas import (
     StoragePutResult,
 )
 
-from ..auth.security import PrincipalContext, require_scope
 from ..deps import get_state
 from ..services import s3 as s3_svc
 from ..services.audit import now_ms
@@ -27,7 +26,6 @@ async def get_object(
     bucket: str,
     path: str,
     state: AppState = Depends(get_state),
-    principal: PrincipalContext = Depends(require_scope("storage:read")),
 ) -> StreamingResponse:
     started = now_ms()
     chunks, meta = s3_svc.stream_get(state.s3_client, bucket, path)
@@ -37,7 +35,6 @@ async def get_object(
     if meta.get("etag"):
         headers["ETag"] = str(meta["etag"])
     await state.audit.record(
-        principal=principal,
         surface="storage",
         op="GET",
         path=f"/storage/v1/object/{bucket}/{path}",
@@ -61,14 +58,12 @@ async def put_object(
     path: str,
     request: Request,
     state: AppState = Depends(get_state),
-    principal: PrincipalContext = Depends(require_scope("storage:write")),
 ) -> StoragePutResult:
     started = now_ms()
     payload = await request.body()
     content_type = request.headers.get("content-type")
     uri = s3_svc.put_idempotent(state.s3_client, bucket, path, payload, content_type)
     await state.audit.record(
-        principal=principal,
         surface="storage",
         op="PUT",
         path=f"/storage/v1/object/{bucket}/{path}",
@@ -84,12 +79,10 @@ async def delete_object(
     bucket: str,
     path: str,
     state: AppState = Depends(get_state),
-    principal: PrincipalContext = Depends(require_scope("storage:write")),
 ) -> None:
     started = now_ms()
     s3_svc.delete(state.s3_client, bucket, path)
     await state.audit.record(
-        principal=principal,
         surface="storage",
         op="DELETE",
         path=f"/storage/v1/object/{bucket}/{path}",
@@ -104,12 +97,10 @@ async def list_bucket(
     prefix: str | None = None,
     limit: int = Query(100, ge=1, le=1000),
     state: AppState = Depends(get_state),
-    principal: PrincipalContext = Depends(require_scope("storage:read")),
 ) -> StorageList:
     started = now_ms()
     items = s3_svc.list_objects(state.s3_client, bucket, prefix, limit)
     await state.audit.record(
-        principal=principal,
         surface="storage",
         op="LIST",
         path=f"/storage/v1/list/{bucket}",
@@ -127,13 +118,11 @@ async def sign_upload(
     expires: int = Query(300, ge=10, le=3600),
     content_type: str | None = None,
     state: AppState = Depends(get_state),
-    principal: PrincipalContext = Depends(require_scope("storage:write")),
 ) -> SignedUrl:
     if not state.s3_client:
         raise HTTPException(status_code=500, detail="s3 client not configured")
     url = s3_svc.presign_put(state.s3_client, bucket, path, expires, content_type)
     await state.audit.record(
-        principal=principal,
         surface="storage",
         op="SIGN_PUT",
         path=f"/storage/v1/upload/sign/{bucket}/{path}",
@@ -149,11 +138,9 @@ async def sign_download(
     path: str,
     expires: int = Query(300, ge=10, le=3600),
     state: AppState = Depends(get_state),
-    principal: PrincipalContext = Depends(require_scope("storage:read")),
 ) -> SignedUrl:
     url = s3_svc.presign_get(state.s3_client, bucket, path, expires)
     await state.audit.record(
-        principal=principal,
         surface="storage",
         op="SIGN_GET",
         path=f"/storage/v1/download/sign/{bucket}/{path}",

@@ -1,9 +1,6 @@
-"""``POST /sql/v1`` — psycopg passthrough scoped to the principal's role.
+"""``POST /sql/v1`` — psycopg passthrough running as the admin role.
 
-Reads run by default. DML requires the ``sql:write`` scope; the route
-sets the session role to either the user role or admin role accordingly,
-so RLS policies on the underlying tables apply.
-
+Reads + writes both run under the admin Postgres role (no auth).
 Multi-statement strings are rejected (one query per call).
 """
 
@@ -16,7 +13,6 @@ from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 from sqlalchemy.engine.url import make_url
 
-from ..auth.security import PrincipalContext, authenticate_bearer
 from ..deps import get_state
 from ..services.audit import now_ms
 from ..state import AppState
@@ -50,35 +46,14 @@ def _libpq_dsn(url: str) -> str:
     return parsed.render_as_string(hide_password=False)
 
 
-def _resolve_role(principal: PrincipalContext, settings) -> tuple[str, bool]:
-    scopes = set(principal.scopes)
-    if "*" in scopes:
-        return settings.postgrest_admin_role, True
-    if "sql:write" in scopes:
-        return settings.postgrest_user_role, True
-    if "sql:read" in scopes:
-        return settings.postgrest_user_role, False
-    return settings.postgrest_anon_role, False
-
-
 @router.post("", response_model=SqlResult)
 async def run_sql(
     body: SqlRequest,
     state: AppState = Depends(get_state),
-    principal: PrincipalContext = Depends(authenticate_bearer),
 ) -> SqlResult:
-    if not (
-        "*" in principal.scopes
-        or "sql:read" in principal.scopes
-        or "sql:write" in principal.scopes
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="sql:read or sql:write scope required",
-        )
     _validate_single_statement(body.query)
 
-    role, allow_writes = _resolve_role(principal, state.settings)
+    role = state.settings.postgrest_admin_role
     started = now_ms()
     rows: list[dict] = []
     rowcount = 0
@@ -86,7 +61,7 @@ async def run_sql(
     status_code = 200
     try:
         async with await psycopg.AsyncConnection.connect(
-            _libpq_dsn(state.settings.database_url), autocommit=allow_writes
+            _libpq_dsn(state.settings.database_url), autocommit=True
         ) as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(f"SET LOCAL ROLE {role}")
@@ -100,7 +75,6 @@ async def run_sql(
         logger.warning("sql failed: %s", exc)
     elapsed = now_ms() - started
     await state.audit.record(
-        principal=principal,
         surface="sql",
         op="QUERY",
         path="/sql/v1",

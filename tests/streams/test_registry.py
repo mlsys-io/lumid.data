@@ -28,7 +28,6 @@ async def test_register_and_list(session) -> None:
         transport="webhook",
         config={},
         sink={"kind": "postgres_table", "schema": "public", "table": "ev"},
-        created_by="alice",
     )
     assert row.id.startswith("str-")
     assert row.state == "paused"
@@ -44,7 +43,6 @@ async def test_unknown_transport_rejected(session) -> None:
             transport="ftp",
             config={},
             sink={},
-            created_by="x",
         )
 
 
@@ -55,7 +53,6 @@ async def test_state_transitions(session) -> None:
         transport="webhook",
         config={},
         sink={"kind": "postgres_table", "table": "t"},
-        created_by="x",
     )
     out = await registry.set_state(session, src.id, "active")
     assert out is not None and out.state == "active"

@@ -19,7 +19,6 @@ from ...db.models import StreamDlq, StreamRun
 from ...streams import registry as stream_registry
 from ...streams import sinks
 from ...streams.base import StreamMessage
-from ..auth.security import PrincipalContext, authenticate_bearer, require_scope
 from ..deps import get_session, get_state
 from ..state import AppState
 
@@ -52,7 +51,6 @@ async def register_stream(
     body: RegisterRequest,
     session: AsyncSession = Depends(get_session),
     state: AppState = Depends(get_state),
-    principal: PrincipalContext = Depends(require_scope("streams:write")),
 ) -> dict[str, Any]:
     sink_dict = body.sink.model_dump(by_alias=True)
     if body.sink.kind == "postgres_table":
@@ -68,7 +66,6 @@ async def register_stream(
         transport=body.transport,
         config=body.config,
         sink=sink_dict,
-        created_by=principal.principal_id,
     )
     return _serialize(row)
 
@@ -76,7 +73,6 @@ async def register_stream(
 @router.get("/v1/streams")
 async def list_streams(
     session: AsyncSession = Depends(get_session),
-    _principal: PrincipalContext = Depends(require_scope("streams:read")),
 ) -> list[dict[str, Any]]:
     return [_serialize(r) for r in await stream_registry.list_sources(session)]
 
@@ -85,7 +81,6 @@ async def list_streams(
 async def get_stream(
     source_id: str,
     session: AsyncSession = Depends(get_session),
-    _principal: PrincipalContext = Depends(require_scope("streams:read")),
 ) -> dict[str, Any]:
     row = await stream_registry.get(session, source_id)
     if row is None:
@@ -99,7 +94,6 @@ async def set_stream_state(
     body: StateChangeRequest,
     session: AsyncSession = Depends(get_session),
     state: AppState = Depends(get_state),
-    _principal: PrincipalContext = Depends(require_scope("streams:write")),
 ) -> dict[str, Any]:
     row = await stream_registry.set_state(session, source_id, body.state)
     if row is None:
@@ -116,7 +110,6 @@ async def set_stream_state(
 async def stream_status(
     source_id: str,
     session: AsyncSession = Depends(get_session),
-    _principal: PrincipalContext = Depends(require_scope("streams:read")),
 ) -> dict[str, Any]:
     src = await stream_registry.get(session, source_id)
     if src is None:
@@ -143,7 +136,6 @@ async def ingest_webhook(
     request: Request,
     session: AsyncSession = Depends(get_session),
     state: AppState = Depends(get_state),
-    _principal: PrincipalContext = Depends(require_scope("ingest:write")),
 ) -> dict[str, str]:
     src = await stream_registry.get(session, source_id)
     if src is None:
@@ -173,16 +165,6 @@ async def ingest_websocket(websocket: WebSocket, source_id: str) -> None:
     await websocket.accept()
     state: AppState = websocket.app.state.app_state
     async with state.sessionmaker() as session:
-        # Inline auth for WS: bearer is sent as the first text frame OR via
-        # the ``Authorization`` header on the upgrade request.
-        try:
-            principal = await _ws_authenticate(websocket)
-        except HTTPException as exc:
-            await websocket.close(code=4401, reason=exc.detail)
-            return
-        if "*" not in principal.scopes and "ingest:write" not in principal.scopes:
-            await websocket.close(code=4403, reason="ingest:write required")
-            return
         src = await stream_registry.get(session, source_id)
         if src is None or src.transport != "websocket" or src.state != "active":
             await websocket.close(code=4409, reason="stream not ready")
@@ -207,7 +189,6 @@ async def ingest_websocket(websocket: WebSocket, source_id: str) -> None:
 async def list_dlq(
     source_id: str,
     session: AsyncSession = Depends(get_session),
-    _principal: PrincipalContext = Depends(require_scope("streams:read")),
 ) -> list[dict[str, Any]]:
     stmt = (
         select(StreamDlq)
@@ -224,7 +205,6 @@ async def replay_dlq(
     dlq_id: str,
     session: AsyncSession = Depends(get_session),
     state: AppState = Depends(get_state),
-    _principal: PrincipalContext = Depends(require_scope("streams:write")),
 ) -> dict[str, str]:
     row = await session.get(StreamDlq, dlq_id)
     if row is None:
@@ -241,16 +221,6 @@ async def replay_dlq(
     return {"status": "replayed"}
 
 
-async def _ws_authenticate(ws: WebSocket) -> PrincipalContext:
-    auth = ws.headers.get("authorization") or ""
-    if auth.lower().startswith("bearer "):
-        from fastapi.security import HTTPAuthorizationCredentials
-
-        creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=auth[7:])
-        return await authenticate_bearer(creds=creds)
-    return await authenticate_bearer(creds=None)
-
-
 def _serialize(row: Any) -> dict[str, Any]:
     return {
         "id": row.id,
@@ -260,7 +230,6 @@ def _serialize(row: Any) -> dict[str, Any]:
         "config": row.config,
         "sink": row.sink,
         "created_at": row.created_at.isoformat(),
-        "created_by": row.created_by,
     }
 
 

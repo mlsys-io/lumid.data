@@ -1,9 +1,8 @@
-"""FastAPI entrypoint. Lifespan loads plugins from LUMID_DATA_PLUGINS."""
+"""FastAPI entrypoint."""
 
-import importlib
 import logging
 from collections.abc import AsyncIterator
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
@@ -94,26 +93,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     await stream_runner.start_all_active()
 
-    plugin_stack = AsyncExitStack()
-    plugin_names = [
-        name.strip() for name in settings.plugins.split(",") if name.strip()
-    ]
-    for name in plugin_names:
-        module = importlib.import_module(name)
-        installer = getattr(module, "install", None)
-        if installer is None:
-            logger.warning("plugin %s has no install()", name)
-            continue
-        result = installer()
-        if hasattr(result, "__aenter__"):
-            await plugin_stack.enter_async_context(result)
-        logger.info("loaded plugin %s", name)
-
     try:
         yield
     finally:
         await stream_runner.stop_all()
-        await plugin_stack.aclose()
         if nats_client is not None:
             await nats_client.drain()
         if llm_adapter is not None:

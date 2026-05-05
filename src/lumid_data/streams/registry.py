@@ -26,7 +26,6 @@ async def register(
     transport: str,
     config: dict[str, Any],
     sink: dict[str, Any],
-    created_by: str,
 ) -> StreamSource:
     if transport not in VALID_TRANSPORTS:
         raise ValueError(f"unknown transport {transport!r}")
@@ -37,7 +36,6 @@ async def register(
         config=config,
         sink=sink,
         state="paused",
-        created_by=created_by,
     )
     session.add(row)
     await session.commit()
