@@ -1,9 +1,5 @@
-"""HTTP client SDK for lumid.data.
+"""HTTP client SDK for lumid.data — sync ``Client`` + async ``AsyncClient``."""
 
-Apps import :class:`Client` and call one method per surface — ``db_*``,
-``storage_*``, ``sql``, ``agent_run`` — against the unified URL.
-"""
+from .core import AsyncClient, Client, ClientError, Credentials
 
-from .core import Client, ClientError, Credentials
-
-__all__ = ["Client", "ClientError", "Credentials"]
+__all__ = ["AsyncClient", "Client", "ClientError", "Credentials"]
