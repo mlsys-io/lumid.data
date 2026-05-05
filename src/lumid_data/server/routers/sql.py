@@ -40,6 +40,19 @@ def _validate_single_statement(sql: str) -> None:
         )
 
 
+def _libpq_dsn(url: str) -> str:
+    """Strip SQLAlchemy driver suffixes so psycopg.connect accepts the URL.
+
+    The Settings ``database_url`` uses SQLAlchemy's ``postgresql+psycopg://``
+    shape so the same field works with the SQLAlchemy meta-DB layer; raw
+    psycopg only understands ``postgresql://`` / ``postgres://``.
+    """
+    for prefix in ("postgresql+psycopg://", "postgres+psycopg://"):
+        if url.startswith(prefix):
+            return "postgresql://" + url[len(prefix) :]
+    return url
+
+
 def _resolve_role(principal: PrincipalContext, settings) -> tuple[str, bool]:
     scopes = set(principal.scopes)
     if "*" in scopes:
@@ -76,7 +89,7 @@ async def run_sql(
     status_code = 200
     try:
         async with await psycopg.AsyncConnection.connect(
-            state.settings.database_url, autocommit=allow_writes
+            _libpq_dsn(state.settings.database_url), autocommit=allow_writes
         ) as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(f"SET LOCAL ROLE {role}")

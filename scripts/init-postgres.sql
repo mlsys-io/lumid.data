@@ -19,10 +19,16 @@ CREATE ROLE app_admin LOGIN PASSWORD 'app_admin';
 GRANT postgrest_anon TO app_admin;
 GRANT app_user TO app_admin;
 
+-- The app boots as ``app_admin`` and runs idempotent ``CREATE SCHEMA
+-- IF NOT EXISTS`` / DDL on the lumid_data_meta schema. Grant CREATE on
+-- the database so those startups succeed.
+GRANT CREATE ON DATABASE lumid_data TO app_admin;
+
 -- Schema layout: the public schema holds user data; lumid_data_meta is
 -- service-internal (audit_log, agent_runs).
-CREATE SCHEMA IF NOT EXISTS lumid_data_meta;
+CREATE SCHEMA IF NOT EXISTS lumid_data_meta AUTHORIZATION app_admin;
 GRANT USAGE ON SCHEMA public TO postgrest_anon, app_user;
+GRANT USAGE, CREATE ON SCHEMA public TO app_admin;
 GRANT USAGE ON SCHEMA lumid_data_meta TO app_admin;
 
 -- Default grants so future tables created in public are visible to roles.
