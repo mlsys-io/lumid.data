@@ -50,13 +50,17 @@ class Client:
         self,
         *,
         base_url: str | None = None,
+        token: str | None = None,
         timeout_sec: float = 30.0,
     ) -> None:
         self._base_url = (base_url or os.environ["LUMID_DATA_URL"]).rstrip("/")
+        self._token = token or os.environ.get("LUMID_TOKEN")
         self._timeout = httpx.Timeout(timeout_sec, connect=5.0)
 
     def _headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:
         h = {"Accept": "application/json"}
+        if self._token:
+            h["Authorization"] = f"Bearer {self._token}"
         if extra:
             h.update(extra)
         return h
@@ -269,13 +273,17 @@ class AsyncClient:
         self,
         *,
         base_url: str | None = None,
+        token: str | None = None,
         timeout_sec: float = 30.0,
     ) -> None:
         self._base_url = (base_url or os.environ["LUMID_DATA_URL"]).rstrip("/")
+        self._token = token or os.environ.get("LUMID_TOKEN")
         self._timeout = httpx.Timeout(timeout_sec, connect=5.0)
 
     def _headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:
         h = {"Accept": "application/json"}
+        if self._token:
+            h["Authorization"] = f"Bearer {self._token}"
         if extra:
             h.update(extra)
         return h

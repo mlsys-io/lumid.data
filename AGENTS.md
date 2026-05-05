@@ -14,7 +14,7 @@ one unified URL:
    directly.
 2. **LLM-driven data agent** — `/agent/v1` runs a tool-use loop over
    the same CRUD endpoints; `/mcp` exposes the same tools to any MCP
-   client. Same audit log.
+   client. Same auth, same audit log.
 
 The agent is **chat-with-data** (Snowflake Cortex / Databricks Genie
 lane): an LLM orchestrates the CRUD calls. There is no privileged
@@ -54,6 +54,8 @@ backdoor — the agent uses the same URLs a direct client would.
 | `src/lumid_data/server/main.py` | FastAPI app + lifespan |
 | `src/lumid_data/server/routers/` | health, db_proxy, storage, sql, streams, agent, admin, mcp_mount |
 | `src/lumid_data/server/services/` | postgrest_jwt, audit, s3 |
+| `src/lumid_data/server/auth/security.py` | OSS no-op auth shim; delegates to IDENTITY_PROVIDERS chain |
+| `src/lumid_data/server/hooks/` | plugin extension protocols + registries |
 | `src/lumid_data/streams/` | webhook + websocket + kafka adapters, sinks, supervised runner |
 | `src/lumid_data/agent/` | provider-agnostic tool-use runner + tool catalog |
 | `src/lumid_data/agent/providers/` | anthropic / openai / openai_compat |
@@ -84,6 +86,20 @@ uv run pre-commit run --all-files         # before any commit
 uv run pytest tests/                      # unit tests
 uv run lumid-data stack up                # full local stack
 ```
+
+## Hook Plugin Extension Points
+
+Plugins are Python modules with a top-level `install()` (sync or
+`@asynccontextmanager async def`). Loaded from `LUMID_DATA_PLUGINS` env
+var (CSV of importable module names) at FastAPI lifespan startup.
+
+- `IdentityProvider` — resolve a bearer token to a `PrincipalContext`
+  (`server/hooks/identity.py`).
+
+With no plugin registered, `authenticate_api_key` returns
+`default_principal()` — auth is off and every caller is admin (OSS
+local-dev shape). Routers use `default_principal()` directly to
+short-circuit auth in the unconfigured case.
 
 ## API Reference (`http://localhost:9100`)
 
@@ -122,7 +138,7 @@ ID factories live in `src/lumid_data/utils/ids.py`.
 ```python
 from lumid_data.sdk import Client
 
-client = Client(base_url="http://localhost:9100")
+client = Client(base_url="http://localhost:9100", token=os.environ.get("LUMID_TOKEN"))
 
 # /db
 rows = client.db_select("users", id="eq.1")
@@ -172,6 +188,7 @@ to `.env.example` at the repo root.
 | `LUMID_DATA_LLM_BASE_URL` | – | base URL for `openai_compat` |
 | `LUMID_DATA_AGENT_MAX_STEPS` | `20` | tool-use loop budget |
 | `KAFKA_BOOTSTRAP` | – | Redpanda/Kafka bootstrap; required only for kafka-transport streams |
+| `LUMID_DATA_PLUGINS` | – | CSV of plugin module names |
 | `LOG_LEVEL` | `INFO` | log level |
 
 ## Code Style

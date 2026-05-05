@@ -16,6 +16,7 @@ app = typer.Typer(
 def _client() -> Client:
     return Client(
         base_url=os.environ.get("LUMID_DATA_URL", "http://127.0.0.1:9100"),
+        token=os.environ.get("LUMID_TOKEN"),
     )
 
 

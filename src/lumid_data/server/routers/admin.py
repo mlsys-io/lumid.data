@@ -16,6 +16,7 @@ router = APIRouter(prefix="/v1/admin", tags=["admin"])
 async def list_audit(
     surface: str | None = None,
     op: str | None = None,
+    principal_id: str | None = None,
     limit: int = Query(50, ge=1, le=500),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, list[dict[str, Any]]]:
@@ -24,12 +25,16 @@ async def list_audit(
         stmt = stmt.where(AuditLog.surface == surface)
     if op:
         stmt = stmt.where(AuditLog.op == op)
+    if principal_id:
+        stmt = stmt.where(AuditLog.principal_id == principal_id)
     rows = (await session.execute(stmt)).scalars().all()
     return {
         "items": [
             {
                 "id": r.id,
                 "received_at": r.received_at.isoformat(),
+                "principal_id": r.principal_id,
+                "org_id": r.org_id,
                 "surface": r.surface,
                 "op": r.op,
                 "path": r.path,
@@ -45,10 +50,13 @@ async def list_audit(
 
 @router.get("/runs")
 async def list_runs(
+    principal_id: str | None = None,
     limit: int = Query(50, ge=1, le=500),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, list[dict[str, Any]]]:
     stmt = select(AgentRun).order_by(desc(AgentRun.received_at)).limit(limit)
+    if principal_id:
+        stmt = stmt.where(AgentRun.principal_id == principal_id)
     rows = (await session.execute(stmt)).scalars().all()
     return {
         "items": [
@@ -56,6 +64,7 @@ async def list_runs(
                 "id": r.id,
                 "received_at": r.received_at.isoformat(),
                 "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+                "principal_id": r.principal_id,
                 "provider": r.provider,
                 "model": r.model,
                 "goal": r.goal,
@@ -83,6 +92,7 @@ async def get_run(
         "id": row.id,
         "received_at": row.received_at.isoformat(),
         "completed_at": row.completed_at.isoformat() if row.completed_at else None,
+        "principal_id": row.principal_id,
         "provider": row.provider,
         "model": row.model,
         "goal": row.goal,

@@ -11,6 +11,7 @@ import logging
 import httpx
 from fastapi import APIRouter, Depends, Request, Response
 
+from ..auth.security import default_principal
 from ..deps import get_state
 from ..services.audit import now_ms
 from ..services.postgrest_jwt import mint
@@ -65,6 +66,7 @@ async def proxy(
     }
     elapsed = now_ms() - started
     await state.audit.record(
+        principal=default_principal(),
         surface="db",
         op=request.method,
         path=f"/db/v1/{path}",

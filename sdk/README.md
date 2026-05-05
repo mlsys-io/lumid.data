@@ -15,11 +15,11 @@ pip install "lumid-data-sdk @ git+https://github.com/mlsys-io/lumid.data.git#sub
 ```python
 from lumid_data.sdk import Client, AsyncClient
 
-c = Client(base_url="http://localhost:9100")
+c = Client(base_url="http://localhost:9100", token=os.environ.get("LUMID_TOKEN"))
 rows = c.sql("SELECT 1").rows
 c.storage_put("photos", "cat.png", open("cat.png", "rb").read(), mime="image/png")
 
-ac = AsyncClient(base_url="http://localhost:9100")
+ac = AsyncClient(base_url="http://localhost:9100", token=os.environ.get("LUMID_TOKEN"))
 rows = (await ac.sql("SELECT 1")).rows
 ```
 

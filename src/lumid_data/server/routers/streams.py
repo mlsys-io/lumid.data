@@ -19,6 +19,7 @@ from ...db.models import StreamDlq, StreamRun
 from ...streams import registry as stream_registry
 from ...streams import sinks
 from ...streams.base import StreamMessage
+from ..auth.security import default_principal
 from ..deps import get_session, get_state
 from ..state import AppState
 
@@ -66,6 +67,7 @@ async def register_stream(
         transport=body.transport,
         config=body.config,
         sink=sink_dict,
+        created_by=default_principal().principal_id,
     )
     return _serialize(row)
 
@@ -230,6 +232,7 @@ def _serialize(row: Any) -> dict[str, Any]:
         "config": row.config,
         "sink": row.sink,
         "created_at": row.created_at.isoformat(),
+        "created_by": row.created_by,
     }
 
 

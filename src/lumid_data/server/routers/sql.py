@@ -1,6 +1,8 @@
 """``POST /sql/v1`` — psycopg passthrough running as the admin role.
 
-Reads + writes both run under the admin Postgres role (no auth).
+OSS has no auth, so every request runs under the admin Postgres role.
+Cloud overlays plug into the identity hook chain to bind a real principal;
+they're free to add their own role-resolution shim on top.
 Multi-statement strings are rejected (one query per call).
 """
 
@@ -13,6 +15,7 @@ from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 from sqlalchemy.engine.url import make_url
 
+from ..auth.security import default_principal
 from ..deps import get_state
 from ..services.audit import now_ms
 from ..state import AppState
@@ -52,6 +55,7 @@ async def run_sql(
     state: AppState = Depends(get_state),
 ) -> SqlResult:
     _validate_single_statement(body.query)
+    principal = default_principal()
 
     role = state.settings.postgrest_admin_role
     started = now_ms()
@@ -75,6 +79,7 @@ async def run_sql(
         logger.warning("sql failed: %s", exc)
     elapsed = now_ms() - started
     await state.audit.record(
+        principal=principal,
         surface="sql",
         op="QUERY",
         path="/sql/v1",

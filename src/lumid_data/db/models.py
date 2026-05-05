@@ -33,6 +33,8 @@ class AuditLog(Base):
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, index=True
     )
+    principal_id: Mapped[str] = mapped_column(String(128), index=True)
+    org_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     surface: Mapped[str] = mapped_column(
         String(16), index=True
     )  # db|storage|sql|agent|mcp
@@ -57,6 +59,7 @@ class AgentRun(Base):
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    principal_id: Mapped[str] = mapped_column(String(128), index=True)
     provider: Mapped[str] = mapped_column(String(32))
     model: Mapped[str] = mapped_column(String(128))
     goal: Mapped[str] = mapped_column(Text)
@@ -96,6 +99,7 @@ class StreamSource(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow
     )
+    created_by: Mapped[str] = mapped_column(String(128))
 
 
 class StreamRun(Base):

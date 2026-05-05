@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ...db.models import AuditLog
 from ...utils.ids import new_audit_id
+from ..auth.security import PrincipalContext
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class AuditWriter:
     async def record(
         self,
         *,
+        principal: PrincipalContext,
         surface: str,
         op: str,
         path: str,
@@ -36,6 +38,8 @@ class AuditWriter:
     ) -> str:
         row = AuditLog(
             id=new_audit_id(),
+            principal_id=principal.principal_id,
+            org_id=principal.org_id,
             surface=surface,
             op=op,
             path=path[:1024],
@@ -54,6 +58,7 @@ class AuditWriter:
                     json.dumps(
                         {
                             "id": row.id,
+                            "principal_id": row.principal_id,
                             "surface": surface,
                             "op": op,
                             "path": row.path,

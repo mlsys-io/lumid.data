@@ -27,7 +27,8 @@ browser). Set `LUMID_DATA_LLM_API_KEY` in `.env` to unlock
 `/agent/v1`.
 
 ```bash
-# Direct CRUD
+# Direct CRUD (OSS auth is a no-op; the Authorization header is optional
+# unless an IdentityProvider plugin is registered).
 curl http://127.0.0.1:9100/db/v1/users?id=eq.1
 curl -X PUT http://127.0.0.1:9100/storage/v1/object/lumid-data/hello.txt --data 'hello'
 

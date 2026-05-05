@@ -11,6 +11,7 @@ from lumid_data.sdk.schemas import (
     StoragePutResult,
 )
 
+from ..auth.security import default_principal
 from ..deps import get_state
 from ..services import s3 as s3_svc
 from ..services.audit import now_ms
@@ -35,6 +36,7 @@ async def get_object(
     if meta.get("etag"):
         headers["ETag"] = str(meta["etag"])
     await state.audit.record(
+        principal=default_principal(),
         surface="storage",
         op="GET",
         path=f"/storage/v1/object/{bucket}/{path}",
@@ -64,6 +66,7 @@ async def put_object(
     content_type = request.headers.get("content-type")
     uri = s3_svc.put_idempotent(state.s3_client, bucket, path, payload, content_type)
     await state.audit.record(
+        principal=default_principal(),
         surface="storage",
         op="PUT",
         path=f"/storage/v1/object/{bucket}/{path}",
@@ -83,6 +86,7 @@ async def delete_object(
     started = now_ms()
     s3_svc.delete(state.s3_client, bucket, path)
     await state.audit.record(
+        principal=default_principal(),
         surface="storage",
         op="DELETE",
         path=f"/storage/v1/object/{bucket}/{path}",
@@ -101,6 +105,7 @@ async def list_bucket(
     started = now_ms()
     items = s3_svc.list_objects(state.s3_client, bucket, prefix, limit)
     await state.audit.record(
+        principal=default_principal(),
         surface="storage",
         op="LIST",
         path=f"/storage/v1/list/{bucket}",
@@ -123,6 +128,7 @@ async def sign_upload(
         raise HTTPException(status_code=500, detail="s3 client not configured")
     url = s3_svc.presign_put(state.s3_client, bucket, path, expires, content_type)
     await state.audit.record(
+        principal=default_principal(),
         surface="storage",
         op="SIGN_PUT",
         path=f"/storage/v1/upload/sign/{bucket}/{path}",
@@ -141,6 +147,7 @@ async def sign_download(
 ) -> SignedUrl:
     url = s3_svc.presign_get(state.s3_client, bucket, path, expires)
     await state.audit.record(
+        principal=default_principal(),
         surface="storage",
         op="SIGN_GET",
         path=f"/storage/v1/download/sign/{bucket}/{path}",
