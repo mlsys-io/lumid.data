@@ -6,7 +6,7 @@ import sys
 
 import typer
 
-from ...client import Client, ClientError
+from ...sdk import Client, ClientError
 
 app = typer.Typer(
     no_args_is_help=True, add_completion=False, help="Run SQL via the /sql/v1 endpoint"

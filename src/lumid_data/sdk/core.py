@@ -1,10 +1,4 @@
-"""lumid.data client SDK.
-
-Thin HTTP wrapper around the unified URL — one method per surface.
-The client is intentionally surface-faithful: the Supabase-shaped
-``/db?id=eq.1`` filter syntax flows through verbatim; a Pythonic
-helper layer can sit on top later.
-"""
+"""lumid.data SDK — thin HTTP wrapper, one method per surface."""
 
 import json
 import logging
@@ -115,6 +109,15 @@ class Client:
             raise ClientError(f"storage_get failed ({r.status_code}): {r.text}")
         return r.content
 
+    def storage_stat(self, bucket: str, path: str) -> bool:
+        """``True`` when ``path`` exists under ``bucket``.
+
+        lumid.data's REST surface has no HEAD; probe via list with the full
+        key as prefix and check for an exact match.
+        """
+        items = self.storage_list(bucket, prefix=path, limit=1)
+        return any(it.get("key") == path for it in items)
+
     def storage_put(
         self, bucket: str, path: str, content: bytes, mime: str | None = None
     ) -> dict[str, Any]:
@@ -178,6 +181,13 @@ class Client:
                 json={"query": query, "params": params or []},
             )
         return _ok_json(r, "sql")
+
+    # ── /healthz ──────────────────────────────────────────────────
+
+    def healthz(self) -> bool:
+        with httpx.Client(timeout=self._timeout) as c:
+            r = c.get(f"{self._base_url}/healthz", headers=self._headers())
+        return r.status_code < 300
 
     # ── /agent ────────────────────────────────────────────────────
 
@@ -246,6 +256,178 @@ class Client:
         with path.open("rb") as f:
             data = tomllib.load(f)
         return Credentials(app=app, raw=data)
+
+
+class AsyncClient:
+    """Async client over lumid.data's unified URL — same surface as :class:`Client`."""
+
+    def __init__(
+        self,
+        *,
+        base_url: str | None = None,
+        token: str | None = None,
+        timeout_sec: float = 30.0,
+    ) -> None:
+        self._base_url = (base_url or os.environ["LUMID_DATA_URL"]).rstrip("/")
+        self._token = token or os.environ.get("LUMID_TOKEN")
+        self._timeout = httpx.Timeout(timeout_sec, connect=5.0)
+
+    def _headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:
+        h = {"Accept": "application/json"}
+        if self._token:
+            h["Authorization"] = f"Bearer {self._token}"
+        if extra:
+            h.update(extra)
+        return h
+
+    # ── /db ───────────────────────────────────────────────────────
+
+    async def db_select(self, table: str, **filters: str) -> list[dict[str, Any]]:
+        async with httpx.AsyncClient(timeout=self._timeout) as c:
+            r = await c.get(
+                f"{self._base_url}/db/v1/{table}",
+                headers=self._headers(),
+                params=filters,
+            )
+        return _ok_json(r, "db_select")
+
+    async def db_insert(
+        self, table: str, rows: list[dict[str, Any]] | dict[str, Any]
+    ) -> Any:
+        async with httpx.AsyncClient(timeout=self._timeout) as c:
+            r = await c.post(
+                f"{self._base_url}/db/v1/{table}",
+                headers=self._headers({"Prefer": "return=representation"}),
+                json=rows,
+            )
+        return _ok_json(r, "db_insert")
+
+    async def db_update(self, table: str, patch: dict[str, Any], **filters: str) -> Any:
+        async with httpx.AsyncClient(timeout=self._timeout) as c:
+            r = await c.patch(
+                f"{self._base_url}/db/v1/{table}",
+                headers=self._headers({"Prefer": "return=representation"}),
+                params=filters,
+                json=patch,
+            )
+        return _ok_json(r, "db_update")
+
+    async def db_delete(self, table: str, **filters: str) -> Any:
+        async with httpx.AsyncClient(timeout=self._timeout) as c:
+            r = await c.delete(
+                f"{self._base_url}/db/v1/{table}",
+                headers=self._headers(),
+                params=filters,
+            )
+        return _ok_json(r, "db_delete")
+
+    # ── /storage ──────────────────────────────────────────────────
+
+    async def storage_get(self, bucket: str, path: str) -> bytes:
+        async with httpx.AsyncClient(timeout=self._timeout) as c:
+            r = await c.get(
+                f"{self._base_url}/storage/v1/object/{bucket}/{path}",
+                headers=self._headers(),
+            )
+        if r.status_code >= 300:
+            raise ClientError(f"storage_get failed ({r.status_code}): {r.text}")
+        return r.content
+
+    async def storage_stat(self, bucket: str, path: str) -> bool:
+        items = await self.storage_list(bucket, prefix=path, limit=1)
+        return any(it.get("key") == path for it in items)
+
+    async def storage_put(
+        self, bucket: str, path: str, content: bytes, mime: str | None = None
+    ) -> dict[str, Any]:
+        headers = self._headers({"Content-Type": mime or "application/octet-stream"})
+        async with httpx.AsyncClient(timeout=self._timeout) as c:
+            r = await c.put(
+                f"{self._base_url}/storage/v1/object/{bucket}/{path}",
+                headers=headers,
+                content=content,
+            )
+        return _ok_json(r, "storage_put")
+
+    async def storage_delete(self, bucket: str, path: str) -> None:
+        async with httpx.AsyncClient(timeout=self._timeout) as c:
+            r = await c.delete(
+                f"{self._base_url}/storage/v1/object/{bucket}/{path}",
+                headers=self._headers(),
+            )
+        if r.status_code >= 300:
+            raise ClientError(f"storage_delete failed ({r.status_code}): {r.text}")
+
+    async def storage_list(
+        self, bucket: str, prefix: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        params: dict[str, str] = {"limit": str(limit)}
+        if prefix:
+            params["prefix"] = prefix
+        async with httpx.AsyncClient(timeout=self._timeout) as c:
+            r = await c.get(
+                f"{self._base_url}/storage/v1/list/{bucket}",
+                headers=self._headers(),
+                params=params,
+            )
+        return _ok_json(r, "storage_list")["items"]
+
+    async def storage_sign_put(
+        self,
+        bucket: str,
+        path: str,
+        expires: int = 300,
+        content_type: str | None = None,
+    ) -> str:
+        params: dict[str, str] = {"expires": str(expires)}
+        if content_type:
+            params["content_type"] = content_type
+        async with httpx.AsyncClient(timeout=self._timeout) as c:
+            r = await c.post(
+                f"{self._base_url}/storage/v1/upload/sign/{bucket}/{path}",
+                headers=self._headers(),
+                params=params,
+            )
+        return _ok_json(r, "storage_sign_put")["url"]
+
+    # ── /sql ──────────────────────────────────────────────────────
+
+    async def sql(self, query: str, params: list | None = None) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=self._timeout) as c:
+            r = await c.post(
+                f"{self._base_url}/sql/v1",
+                headers=self._headers(),
+                json={"query": query, "params": params or []},
+            )
+        return _ok_json(r, "sql")
+
+    # ── /healthz ──────────────────────────────────────────────────
+
+    async def healthz(self) -> bool:
+        async with httpx.AsyncClient(timeout=self._timeout) as c:
+            r = await c.get(f"{self._base_url}/healthz", headers=self._headers())
+        return r.status_code < 300
+
+    # ── /agent ────────────────────────────────────────────────────
+
+    async def agent_run(
+        self, goal: str, **kwargs: Any
+    ) -> AsyncIterator[tuple[str, Any]]:
+        body: dict[str, Any] = {"goal": goal, **kwargs}
+        async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=5.0)) as c:
+            async with c.stream(
+                "POST",
+                f"{self._base_url}/agent/v1",
+                headers=self._headers({"Accept": "text/event-stream"}),
+                json=body,
+            ) as resp:
+                if resp.status_code >= 300:
+                    body_bytes = await resp.aread()
+                    raise ClientError(
+                        f"agent run failed ({resp.status_code}): {body_bytes.decode()}"
+                    )
+                async for ev in _aiter_sse(resp.aiter_lines()):
+                    yield ev
 
 
 def _ok_json(resp: httpx.Response, op: str) -> Any:

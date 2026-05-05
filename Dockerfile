@@ -22,6 +22,8 @@ ENV LUMID_DATA_HTTP_PORT=9100
 EXPOSE 9100
 
 HEALTHCHECK --interval=20s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:9100/healthz || exit 1
+    CMD curl -fsS "http://127.0.0.1:${LUMID_DATA_HTTP_PORT}/healthz" || exit 1
 
-CMD ["uvicorn", "--factory", "lumid_data.server.main:create_app", "--host", "0.0.0.0", "--port", "9100"]
+# Shell form so ${LUMID_DATA_HTTP_PORT} interpolates at start.
+CMD uvicorn --factory lumid_data.server.main:create_app \
+    --host 0.0.0.0 --port "${LUMID_DATA_HTTP_PORT}"

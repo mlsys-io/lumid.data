@@ -13,6 +13,7 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, status
 from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
+from sqlalchemy.engine.url import make_url
 
 from ..auth.security import PrincipalContext, authenticate_bearer
 from ..deps import get_state
@@ -38,6 +39,14 @@ def _validate_single_statement(sql: str) -> None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="multi-statement queries are not allowed",
         )
+
+
+def _libpq_dsn(url: str) -> str:
+    """Strip the SQLAlchemy driver suffix so raw psycopg accepts the DSN."""
+    parsed = make_url(url)
+    if "+" in parsed.drivername:
+        parsed = parsed.set(drivername=parsed.drivername.split("+", 1)[0])
+    return parsed.render_as_string(hide_password=False)
 
 
 def _resolve_role(principal: PrincipalContext, settings) -> tuple[str, bool]:
@@ -76,7 +85,7 @@ async def run_sql(
     status_code = 200
     try:
         async with await psycopg.AsyncConnection.connect(
-            state.settings.database_url, autocommit=allow_writes
+            _libpq_dsn(state.settings.database_url), autocommit=allow_writes
         ) as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(f"SET LOCAL ROLE {role}")
