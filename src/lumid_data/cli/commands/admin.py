@@ -26,6 +26,7 @@ def _headers() -> dict[str, str]:
 def audit(
     surface: str | None = None,
     op: str | None = None,
+    principal_id: str | None = None,
     limit: int = 50,
 ) -> None:
     params: dict[str, str] = {"limit": str(limit)}
@@ -33,6 +34,8 @@ def audit(
         params["surface"] = surface
     if op:
         params["op"] = op
+    if principal_id:
+        params["principal_id"] = principal_id
     with httpx.Client(timeout=10.0) as c:
         r = c.get(f"{_base_url()}/v1/admin/audit", params=params, headers=_headers())
     if r.status_code >= 300:

@@ -7,7 +7,6 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...db.models import AgentRun, AuditLog
-from ..auth.security import PrincipalContext, require_scope
 from ..deps import get_session
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
@@ -20,7 +19,6 @@ async def list_audit(
     principal_id: str | None = None,
     limit: int = Query(50, ge=1, le=500),
     session: AsyncSession = Depends(get_session),
-    _principal: PrincipalContext = Depends(require_scope("admin:audit")),
 ) -> dict[str, list[dict[str, Any]]]:
     stmt = select(AuditLog).order_by(desc(AuditLog.received_at)).limit(limit)
     if surface:
@@ -55,7 +53,6 @@ async def list_runs(
     principal_id: str | None = None,
     limit: int = Query(50, ge=1, le=500),
     session: AsyncSession = Depends(get_session),
-    _principal: PrincipalContext = Depends(require_scope("admin:audit")),
 ) -> dict[str, list[dict[str, Any]]]:
     stmt = select(AgentRun).order_by(desc(AgentRun.received_at)).limit(limit)
     if principal_id:
@@ -87,7 +84,6 @@ async def list_runs(
 async def get_run(
     run_id: str,
     session: AsyncSession = Depends(get_session),
-    _principal: PrincipalContext = Depends(require_scope("admin:audit")),
 ) -> dict[str, Any]:
     row = await session.get(AgentRun, run_id)
     if row is None:

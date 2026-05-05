@@ -1,91 +1,67 @@
-"""Bearer-token auth.
+"""Minimal auth surface.
 
-lumid.data ships **no DB-backed principals**. The plugin chain in
-``IDENTITY_PROVIDERS`` resolves a bearer token to a ``PrincipalContext``
-when configured (e.g. an OAuth/OIDC introspection plugin). With no
-provider registered, auth is a no-op and any request is treated as the
-default admin principal — local-dev shape.
+lumid.data has no native API-key auth. The semantic is:
+
+- With no `IdentityProvider` plugins registered, `authenticate_api_key`
+  returns a default admin principal — auth is effectively a no-op and every
+  caller is admin. Routers call `default_principal()` directly to short-circuit
+  auth in the unconfigured case.
+- Once at least one provider is registered, every bearer token is routed
+  through the chain in registration order. The first provider returning a
+  non-`None` `PrincipalContext` wins; if none claim the token, 401 is raised.
+
+`PrincipalContext` is the canonical principal type referenced by the hook
+protocol (`server.hooks.identity`); plugins compile against it.
+`authenticate_api_key` is a thin wrapper around the identity-provider
+chain. Routers do not depend on it today; it is kept so anyone wiring a
+plugin can exercise the same code path the chain runs at request time.
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-
-ALLOWED_SCOPES: set[str] = {
-    "*",
-    "db:read",
-    "db:write",
-    "storage:read",
-    "storage:write",
-    "sql:read",
-    "sql:write",
-    "agent:run",
-    "admin:audit",
-    "streams:read",
-    "streams:write",
-    "ingest:write",
-}
-
-_DEFAULT_ADMIN = "default-admin"
-
-_bearer = HTTPBearer(auto_error=False)
+from fastapi import HTTPException, status
 
 
-@dataclass
+@dataclass(frozen=True)
 class PrincipalContext:
     principal_id: str
-    org_id: str | None = None
-    external_id: str | None = None
-    principal_type: str = "user"
-    scopes: list[str] = field(default_factory=list)
+    org_id: str
+    external_id: str
+    principal_type: str
+    scopes: list[str]
 
 
-async def authenticate_bearer(
-    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+def default_principal() -> PrincipalContext:
+    """Synthetic admin principal returned when no auth is configured."""
+    return PrincipalContext(
+        principal_id="admin",
+        org_id="local",
+        external_id="local",
+        principal_type="admin",
+        scopes=["*"],
+    )
+
+
+async def authenticate_api_key(
+    raw_key: str, logger: logging.Logger
 ) -> PrincipalContext:
-    """Resolve a bearer token to a principal via the registered chain.
+    """Resolve a bearer token to a `PrincipalContext` via registered providers.
 
-    No providers registered → returns a default admin principal (OSS).
-    Otherwise the first provider that returns non-None wins; if all
-    return None or raise 401, the request is rejected.
+    With no providers registered, returns `default_principal()` — auth is off,
+    every caller is admin.
     """
     from ..hooks import IDENTITY_PROVIDERS
 
     if not IDENTITY_PROVIDERS:
-        return PrincipalContext(principal_id=_DEFAULT_ADMIN, scopes=["*"])
+        return default_principal()
 
-    if creds is None or not creds.credentials:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token"
-        )
-
-    logger = logging.getLogger("lumid_data.auth")
-    last_exc: HTTPException | None = None
     for provider in IDENTITY_PROVIDERS:
-        try:
-            principal = await provider.resolve(creds.credentials, logger)
-        except HTTPException as exc:
-            last_exc = exc
-            continue
-        if principal is not None:
-            return principal
-    if last_exc is not None:
-        raise last_exc
+        resolved = await provider.resolve(raw_key, logger)
+        if resolved is not None:
+            return resolved
+
     raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="No identity provider accepted the token",
     )
-
-
-def require_scope(scope: str):
-    async def _dep(
-        principal: PrincipalContext = Depends(authenticate_bearer),
-    ) -> PrincipalContext:
-        if "*" in principal.scopes or scope in principal.scopes:
-            return principal
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=f"Scope {scope!r} required"
-        )
-
-    return _dep

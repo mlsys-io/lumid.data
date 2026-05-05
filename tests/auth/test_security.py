@@ -1,4 +1,4 @@
-"""Bearer auth + scope enforcement."""
+"""Auth surface: empty-chain default + provider chain semantics."""
 
 import logging
 
@@ -7,61 +7,67 @@ from fastapi import HTTPException
 
 from lumid_data.server.auth.security import (
     PrincipalContext,
-    authenticate_bearer,
-    require_scope,
+    authenticate_api_key,
+    default_principal,
 )
 from lumid_data.server.hooks import IDENTITY_PROVIDERS
 
 
 @pytest.fixture(autouse=True)
-def _cleanup_providers():
+def _clear_providers():
+    IDENTITY_PROVIDERS.clear()
     yield
     IDENTITY_PROVIDERS.clear()
 
 
-async def test_no_provider_returns_default_admin() -> None:
-    principal = await authenticate_bearer(creds=None)
-    assert principal.principal_id == "default-admin"
-    assert "*" in principal.scopes
+def test_default_principal_is_admin() -> None:
+    p = default_principal()
+    assert p.principal_id == "admin"
+    assert p.scopes == ["*"]
 
 
-async def test_missing_token_when_provider_registered_raises_401() -> None:
-    class _Stub:
-        name = "stub"
+@pytest.mark.asyncio
+async def test_no_providers_returns_default_admin() -> None:
+    p = await authenticate_api_key("any-token", logging.getLogger())
+    assert p == default_principal()
 
-        async def resolve(self, raw, log):
+
+@pytest.mark.asyncio
+async def test_first_claiming_provider_wins() -> None:
+    claimed = PrincipalContext(
+        principal_id="alice",
+        org_id="acme",
+        external_id="ext-1",
+        principal_type="user",
+        scopes=["sql:read"],
+    )
+
+    class _Skip:
+        name = "skip"
+
+        async def resolve(self, raw_token, logger):
             return None
 
-    IDENTITY_PROVIDERS.append(_Stub())
+    class _Claim:
+        name = "claim"
+
+        async def resolve(self, raw_token, logger):
+            return claimed
+
+    IDENTITY_PROVIDERS.extend([_Skip(), _Claim()])
+    p = await authenticate_api_key("tok", logging.getLogger())
+    assert p == claimed
+
+
+@pytest.mark.asyncio
+async def test_no_provider_claims_raises_401() -> None:
+    class _Skip:
+        name = "skip"
+
+        async def resolve(self, raw_token, logger):
+            return None
+
+    IDENTITY_PROVIDERS.append(_Skip())
     with pytest.raises(HTTPException) as exc:
-        await authenticate_bearer(creds=None)
+        await authenticate_api_key("tok", logging.getLogger())
     assert exc.value.status_code == 401
-
-
-async def test_provider_resolves_principal() -> None:
-    class _Stub:
-        name = "stub"
-
-        async def resolve(self, raw, log: logging.Logger) -> PrincipalContext | None:
-            return PrincipalContext(principal_id="alice", scopes=["db:read"])
-
-    IDENTITY_PROVIDERS.append(_Stub())
-    from fastapi.security import HTTPAuthorizationCredentials
-
-    principal = await authenticate_bearer(
-        creds=HTTPAuthorizationCredentials(scheme="Bearer", credentials="t")
-    )
-    assert principal.principal_id == "alice"
-
-
-async def test_require_scope_enforces() -> None:
-    dep = require_scope("db:write")
-    with pytest.raises(HTTPException) as exc:
-        await dep(principal=PrincipalContext(principal_id="x", scopes=["db:read"]))
-    assert exc.value.status_code == 403
-
-
-async def test_require_scope_passes_with_wildcard() -> None:
-    dep = require_scope("db:write")
-    principal = await dep(principal=PrincipalContext(principal_id="x", scopes=["*"]))
-    assert principal.principal_id == "x"

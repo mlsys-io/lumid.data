@@ -1,7 +1,9 @@
 """FastAPI entrypoint. Lifespan loads plugins from LUMID_DATA_PLUGINS."""
 
 import importlib
+import inspect
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 
@@ -28,6 +30,28 @@ from .services.s3 import make_client as make_s3_client
 from .state import AppState
 
 logger = logging.getLogger("lumid_data.server")
+
+
+async def _load_plugins(stack: AsyncExitStack) -> None:
+    """Load LUMID_DATA_PLUGINS modules and enter any async-context-manager
+    install() helpers into the lifespan's exit stack.
+
+    A plugin's `install()` is either:
+      - a sync function returning None (fire-and-forget registration), or
+      - an `@asynccontextmanager async def` returning a ctx manager (registers
+        on enter, cleans up on exit; e.g. closes a SQLAlchemy engine).
+    """
+    raw = os.getenv("LUMID_DATA_PLUGINS", "")
+    for entry in raw.split(","):
+        plugin_name = entry.strip()
+        if not plugin_name:
+            continue
+        mod = importlib.import_module(plugin_name)
+        rv = mod.install()
+        if hasattr(rv, "__aenter__"):
+            await stack.enter_async_context(rv)
+        elif inspect.iscoroutine(rv):
+            await rv
 
 
 @asynccontextmanager
@@ -94,34 +118,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     await stream_runner.start_all_active()
 
-    plugin_stack = AsyncExitStack()
-    plugin_names = [
-        name.strip() for name in settings.plugins.split(",") if name.strip()
-    ]
-    for name in plugin_names:
-        module = importlib.import_module(name)
-        installer = getattr(module, "install", None)
-        if installer is None:
-            logger.warning("plugin %s has no install()", name)
-            continue
-        result = installer()
-        if hasattr(result, "__aenter__"):
-            await plugin_stack.enter_async_context(result)
-        logger.info("loaded plugin %s", name)
-
-    try:
-        yield
-    finally:
-        await stream_runner.stop_all()
-        await plugin_stack.aclose()
-        if nats_client is not None:
-            await nats_client.drain()
-        if llm_adapter is not None:
-            try:
-                await llm_adapter.aclose()
-            except Exception:
-                logger.exception("llm adapter close failed")
-        await engine.dispose()
+    async with AsyncExitStack() as plugin_stack:
+        await _load_plugins(plugin_stack)
+        try:
+            yield
+        finally:
+            await stream_runner.stop_all()
+            if nats_client is not None:
+                await nats_client.drain()
+            if llm_adapter is not None:
+                try:
+                    await llm_adapter.aclose()
+                except Exception:
+                    logger.exception("llm adapter close failed")
+            await engine.dispose()
 
 
 def _create_meta_schema_stmt():

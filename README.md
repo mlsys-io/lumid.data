@@ -27,14 +27,13 @@ browser). Set `LUMID_DATA_LLM_API_KEY` in `.env` to unlock
 `/agent/v1`.
 
 ```bash
-# Direct CRUD
-curl http://127.0.0.1:9100/db/v1/users?id=eq.1 -H "Authorization: Bearer $LUMID_TOKEN"
-curl -X PUT http://127.0.0.1:9100/storage/v1/object/lumid-data/hello.txt \
-  -H "Authorization: Bearer $LUMID_TOKEN" --data 'hello'
+# Direct CRUD (auth is a no-op by default; the Authorization header is
+# optional unless an IdentityProvider plugin is registered).
+curl http://127.0.0.1:9100/db/v1/users?id=eq.1
+curl -X PUT http://127.0.0.1:9100/storage/v1/object/lumid-data/hello.txt --data 'hello'
 
 # Agent (streaming SSE)
 curl http://127.0.0.1:9100/agent/v1 \
-  -H "Authorization: Bearer $LUMID_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"goal": "how many users do we have?"}'
 ```

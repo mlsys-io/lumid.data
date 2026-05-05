@@ -4,8 +4,14 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
+from lumid_data.sdk.schemas import (
+    SignedUrl,
+    StorageList,
+    StorageObject,
+    StoragePutResult,
+)
 
-from ..auth.security import PrincipalContext, require_scope
+from ..auth.security import default_principal
 from ..deps import get_state
 from ..services import s3 as s3_svc
 from ..services.audit import now_ms
@@ -21,7 +27,6 @@ async def get_object(
     bucket: str,
     path: str,
     state: AppState = Depends(get_state),
-    principal: PrincipalContext = Depends(require_scope("storage:read")),
 ) -> StreamingResponse:
     started = now_ms()
     chunks, meta = s3_svc.stream_get(state.s3_client, bucket, path)
@@ -31,7 +36,7 @@ async def get_object(
     if meta.get("etag"):
         headers["ETag"] = str(meta["etag"])
     await state.audit.record(
-        principal=principal,
+        principal=default_principal(),
         surface="storage",
         op="GET",
         path=f"/storage/v1/object/{bucket}/{path}",
@@ -45,20 +50,23 @@ async def get_object(
     )
 
 
-@router.put("/object/{bucket}/{path:path}", status_code=status.HTTP_201_CREATED)
+@router.put(
+    "/object/{bucket}/{path:path}",
+    status_code=status.HTTP_201_CREATED,
+    response_model=StoragePutResult,
+)
 async def put_object(
     bucket: str,
     path: str,
     request: Request,
     state: AppState = Depends(get_state),
-    principal: PrincipalContext = Depends(require_scope("storage:write")),
-) -> dict[str, str]:
+) -> StoragePutResult:
     started = now_ms()
     payload = await request.body()
     content_type = request.headers.get("content-type")
     uri = s3_svc.put_idempotent(state.s3_client, bucket, path, payload, content_type)
     await state.audit.record(
-        principal=principal,
+        principal=default_principal(),
         surface="storage",
         op="PUT",
         path=f"/storage/v1/object/{bucket}/{path}",
@@ -66,7 +74,7 @@ async def put_object(
         latency_ms=now_ms() - started,
         request_meta={"size_bytes": len(payload)},
     )
-    return {"uri": uri, "sha256": s3_svc.compute_sha256(payload)}
+    return StoragePutResult(uri=uri, sha256=s3_svc.compute_sha256(payload))
 
 
 @router.delete("/object/{bucket}/{path:path}", status_code=status.HTTP_204_NO_CONTENT)
@@ -74,12 +82,11 @@ async def delete_object(
     bucket: str,
     path: str,
     state: AppState = Depends(get_state),
-    principal: PrincipalContext = Depends(require_scope("storage:write")),
 ) -> None:
     started = now_ms()
     s3_svc.delete(state.s3_client, bucket, path)
     await state.audit.record(
-        principal=principal,
+        principal=default_principal(),
         surface="storage",
         op="DELETE",
         path=f"/storage/v1/object/{bucket}/{path}",
@@ -88,18 +95,17 @@ async def delete_object(
     )
 
 
-@router.get("/list/{bucket}")
+@router.get("/list/{bucket}", response_model=StorageList)
 async def list_bucket(
     bucket: str,
     prefix: str | None = None,
     limit: int = Query(100, ge=1, le=1000),
     state: AppState = Depends(get_state),
-    principal: PrincipalContext = Depends(require_scope("storage:read")),
-) -> dict[str, list]:
+) -> StorageList:
     started = now_ms()
     items = s3_svc.list_objects(state.s3_client, bucket, prefix, limit)
     await state.audit.record(
-        principal=principal,
+        principal=default_principal(),
         surface="storage",
         op="LIST",
         path=f"/storage/v1/list/{bucket}",
@@ -107,47 +113,45 @@ async def list_bucket(
         latency_ms=now_ms() - started,
         request_meta={"prefix": prefix, "limit": limit},
     )
-    return {"items": items}
+    return StorageList(items=[StorageObject.model_validate(it) for it in items])
 
 
-@router.post("/upload/sign/{bucket}/{path:path}")
+@router.post("/upload/sign/{bucket}/{path:path}", response_model=SignedUrl)
 async def sign_upload(
     bucket: str,
     path: str,
     expires: int = Query(300, ge=10, le=3600),
     content_type: str | None = None,
     state: AppState = Depends(get_state),
-    principal: PrincipalContext = Depends(require_scope("storage:write")),
-) -> dict[str, str | int]:
+) -> SignedUrl:
     if not state.s3_client:
         raise HTTPException(status_code=500, detail="s3 client not configured")
     url = s3_svc.presign_put(state.s3_client, bucket, path, expires, content_type)
     await state.audit.record(
-        principal=principal,
+        principal=default_principal(),
         surface="storage",
         op="SIGN_PUT",
         path=f"/storage/v1/upload/sign/{bucket}/{path}",
         status_code=200,
         latency_ms=0.0,
     )
-    return {"url": url, "expires": expires}
+    return SignedUrl(url=url, expires=expires)
 
 
-@router.post("/download/sign/{bucket}/{path:path}")
+@router.post("/download/sign/{bucket}/{path:path}", response_model=SignedUrl)
 async def sign_download(
     bucket: str,
     path: str,
     expires: int = Query(300, ge=10, le=3600),
     state: AppState = Depends(get_state),
-    principal: PrincipalContext = Depends(require_scope("storage:read")),
-) -> dict[str, str | int]:
+) -> SignedUrl:
     url = s3_svc.presign_get(state.s3_client, bucket, path, expires)
     await state.audit.record(
-        principal=principal,
+        principal=default_principal(),
         surface="storage",
         op="SIGN_GET",
         path=f"/storage/v1/download/sign/{bucket}/{path}",
         status_code=200,
         latency_ms=0.0,
     )
-    return {"url": url, "expires": expires}
+    return SignedUrl(url=url, expires=expires)
