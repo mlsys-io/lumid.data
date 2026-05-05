@@ -71,6 +71,6 @@ jobs:
         with:
           version: "0.11.8"
       - name: Generate frozen requirements
-        run: uv export --frozen --no-dev --no-emit-project --format requirements-txt > /tmp/requirements.txt
+        run: uv export --frozen --no-dev --no-emit-project --no-emit-package lumid-data-sdk --format requirements-txt > /tmp/requirements.txt
       - name: Run pip-audit
         run: uvx pip-audit==2.9.0 --strict -r /tmp/requirements.txt
