@@ -11,6 +11,7 @@ import logging
 
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, status
+from lumid_data.sdk.schemas import SqlResult
 from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 from sqlalchemy.engine.url import make_url
@@ -60,12 +61,12 @@ def _resolve_role(principal: PrincipalContext, settings) -> tuple[str, bool]:
     return settings.postgrest_anon_role, False
 
 
-@router.post("")
+@router.post("", response_model=SqlResult)
 async def run_sql(
     body: SqlRequest,
     state: AppState = Depends(get_state),
     principal: PrincipalContext = Depends(authenticate_bearer),
-) -> dict:
+) -> SqlResult:
     if not (
         "*" in principal.scopes
         or "sql:read" in principal.scopes
@@ -110,4 +111,4 @@ async def run_sql(
     )
     if error is not None:
         raise HTTPException(status_code=status_code, detail=error)
-    return {"rows": rows, "rowcount": rowcount}
+    return SqlResult(rows=rows, rowcount=rowcount)

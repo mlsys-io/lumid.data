@@ -11,6 +11,14 @@ from typing import Any
 
 import httpx
 
+from .schemas import (
+    SignedUrl,
+    SqlResult,
+    StorageList,
+    StorageObject,
+    StoragePutResult,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -116,11 +124,11 @@ class Client:
         key as prefix and check for an exact match.
         """
         items = self.storage_list(bucket, prefix=path, limit=1)
-        return any(it.get("key") == path for it in items)
+        return any(it.key == path for it in items)
 
     def storage_put(
         self, bucket: str, path: str, content: bytes, mime: str | None = None
-    ) -> dict[str, Any]:
+    ) -> StoragePutResult:
         headers = self._headers({"Content-Type": mime or "application/octet-stream"})
         with httpx.Client(timeout=self._timeout) as c:
             r = c.put(
@@ -128,7 +136,7 @@ class Client:
                 headers=headers,
                 content=content,
             )
-        return _ok_json(r, "storage_put")
+        return StoragePutResult.model_validate(_ok_json(r, "storage_put"))
 
     def storage_delete(self, bucket: str, path: str) -> None:
         with httpx.Client(timeout=self._timeout) as c:
@@ -141,7 +149,7 @@ class Client:
 
     def storage_list(
         self, bucket: str, prefix: str | None = None, limit: int = 100
-    ) -> list[dict[str, Any]]:
+    ) -> list[StorageObject]:
         params: dict[str, str] = {"limit": str(limit)}
         if prefix:
             params["prefix"] = prefix
@@ -151,7 +159,7 @@ class Client:
                 headers=self._headers(),
                 params=params,
             )
-        return _ok_json(r, "storage_list")["items"]
+        return StorageList.model_validate(_ok_json(r, "storage_list")).items
 
     def storage_sign_put(
         self,
@@ -159,7 +167,7 @@ class Client:
         path: str,
         expires: int = 300,
         content_type: str | None = None,
-    ) -> str:
+    ) -> SignedUrl:
         params: dict[str, str] = {"expires": str(expires)}
         if content_type:
             params["content_type"] = content_type
@@ -169,18 +177,18 @@ class Client:
                 headers=self._headers(),
                 params=params,
             )
-        return _ok_json(r, "storage_sign_put")["url"]
+        return SignedUrl.model_validate(_ok_json(r, "storage_sign_put"))
 
     # ── /sql ──────────────────────────────────────────────────────
 
-    def sql(self, query: str, params: list | None = None) -> dict[str, Any]:
+    def sql(self, query: str, params: list | None = None) -> SqlResult:
         with httpx.Client(timeout=self._timeout) as c:
             r = c.post(
                 f"{self._base_url}/sql/v1",
                 headers=self._headers(),
                 json={"query": query, "params": params or []},
             )
-        return _ok_json(r, "sql")
+        return SqlResult.model_validate(_ok_json(r, "sql"))
 
     # ── /healthz ──────────────────────────────────────────────────
 
@@ -335,11 +343,11 @@ class AsyncClient:
 
     async def storage_stat(self, bucket: str, path: str) -> bool:
         items = await self.storage_list(bucket, prefix=path, limit=1)
-        return any(it.get("key") == path for it in items)
+        return any(it.key == path for it in items)
 
     async def storage_put(
         self, bucket: str, path: str, content: bytes, mime: str | None = None
-    ) -> dict[str, Any]:
+    ) -> StoragePutResult:
         headers = self._headers({"Content-Type": mime or "application/octet-stream"})
         async with httpx.AsyncClient(timeout=self._timeout) as c:
             r = await c.put(
@@ -347,7 +355,7 @@ class AsyncClient:
                 headers=headers,
                 content=content,
             )
-        return _ok_json(r, "storage_put")
+        return StoragePutResult.model_validate(_ok_json(r, "storage_put"))
 
     async def storage_delete(self, bucket: str, path: str) -> None:
         async with httpx.AsyncClient(timeout=self._timeout) as c:
@@ -360,7 +368,7 @@ class AsyncClient:
 
     async def storage_list(
         self, bucket: str, prefix: str | None = None, limit: int = 100
-    ) -> list[dict[str, Any]]:
+    ) -> list[StorageObject]:
         params: dict[str, str] = {"limit": str(limit)}
         if prefix:
             params["prefix"] = prefix
@@ -370,7 +378,7 @@ class AsyncClient:
                 headers=self._headers(),
                 params=params,
             )
-        return _ok_json(r, "storage_list")["items"]
+        return StorageList.model_validate(_ok_json(r, "storage_list")).items
 
     async def storage_sign_put(
         self,
@@ -378,7 +386,7 @@ class AsyncClient:
         path: str,
         expires: int = 300,
         content_type: str | None = None,
-    ) -> str:
+    ) -> SignedUrl:
         params: dict[str, str] = {"expires": str(expires)}
         if content_type:
             params["content_type"] = content_type
@@ -388,18 +396,18 @@ class AsyncClient:
                 headers=self._headers(),
                 params=params,
             )
-        return _ok_json(r, "storage_sign_put")["url"]
+        return SignedUrl.model_validate(_ok_json(r, "storage_sign_put"))
 
     # ── /sql ──────────────────────────────────────────────────────
 
-    async def sql(self, query: str, params: list | None = None) -> dict[str, Any]:
+    async def sql(self, query: str, params: list | None = None) -> SqlResult:
         async with httpx.AsyncClient(timeout=self._timeout) as c:
             r = await c.post(
                 f"{self._base_url}/sql/v1",
                 headers=self._headers(),
                 json={"query": query, "params": params or []},
             )
-        return _ok_json(r, "sql")
+        return SqlResult.model_validate(_ok_json(r, "sql"))
 
     # ── /healthz ──────────────────────────────────────────────────
 

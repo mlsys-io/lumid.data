@@ -31,4 +31,4 @@ def query(
     except ClientError as exc:
         typer.echo(f"sql failed: {exc}")
         sys.exit(1)
-    typer.echo(json.dumps(result, indent=2, default=str))
+    typer.echo(result.model_dump_json(indent=2))

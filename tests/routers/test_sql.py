@@ -86,4 +86,5 @@ async def test_run_sql_returns_rows() -> None:
         result = await run_sql(
             SqlRequest(query="SELECT 1 AS x"), state=state, principal=p
         )
-    assert result == {"rows": [{"x": 1}], "rowcount": 1}
+    assert result.rows == [{"x": 1}]
+    assert result.rowcount == 1

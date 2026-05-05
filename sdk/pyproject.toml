@@ -12,6 +12,7 @@ license = { text = "Apache-2.0" }
 dependencies = [
     "httpx>=0.28.1",
     "httpx-sse>=0.4.0",
+    "pydantic>=2.6.0",
 ]
 
 [tool.setuptools]

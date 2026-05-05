@@ -44,7 +44,7 @@ def put(
     except ClientError as exc:
         typer.echo(f"put failed: {exc}")
         sys.exit(1)
-    typer.echo(result)
+    typer.echo(result.model_dump_json(indent=2))
 
 
 @app.command("ls")
@@ -55,7 +55,7 @@ def ls(bucket: str, prefix: str | None = None, limit: int = 100) -> None:
         typer.echo(f"ls failed: {exc}")
         sys.exit(1)
     for item in items:
-        typer.echo(f"{item['key']}\t{item['size']}\t{item.get('etag', '')}")
+        typer.echo(f"{item.key}\t{item.size}\t{item.etag or ''}")
 
 
 @app.command("rm")
