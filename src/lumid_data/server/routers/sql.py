@@ -13,6 +13,7 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, status
 from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
+from sqlalchemy.engine.url import make_url
 
 from ..auth.security import PrincipalContext, authenticate_bearer
 from ..deps import get_state
@@ -42,10 +43,10 @@ def _validate_single_statement(sql: str) -> None:
 
 def _libpq_dsn(url: str) -> str:
     """Strip the SQLAlchemy driver suffix so raw psycopg accepts the DSN."""
-    for prefix in ("postgresql+psycopg://", "postgres+psycopg://"):
-        if url.startswith(prefix):
-            return "postgresql://" + url[len(prefix) :]
-    return url
+    parsed = make_url(url)
+    if "+" in parsed.drivername:
+        parsed = parsed.set(drivername=parsed.drivername.split("+", 1)[0])
+    return parsed.render_as_string(hide_password=False)
 
 
 def _resolve_role(principal: PrincipalContext, settings) -> tuple[str, bool]:
