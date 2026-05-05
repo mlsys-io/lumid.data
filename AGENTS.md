@@ -54,7 +54,7 @@ backdoor — the agent uses the same URLs a direct client would.
 | `src/lumid_data/server/main.py` | FastAPI app + lifespan |
 | `src/lumid_data/server/routers/` | health, db_proxy, storage, sql, streams, agent, admin, mcp_mount |
 | `src/lumid_data/server/services/` | postgrest_jwt, audit, s3 |
-| `src/lumid_data/server/auth/security.py` | OSS no-op auth shim; delegates to IDENTITY_PROVIDERS chain |
+| `src/lumid_data/server/auth/security.py` | bearer-token shim; delegates to the IDENTITY_PROVIDERS chain (no-op when empty) |
 | `src/lumid_data/server/hooks/` | plugin extension protocols + registries |
 | `src/lumid_data/streams/` | webhook + websocket + kafka adapters, sinks, supervised runner |
 | `src/lumid_data/agent/` | provider-agnostic tool-use runner + tool catalog |
@@ -65,12 +65,12 @@ backdoor — the agent uses the same URLs a direct client would.
 | `src/lumid_data/cli/` | `lumid-data {stack,sql,storage,agent,admin}` |
 | `Dockerfile`, `docker-compose.yml`, `.env.example` | one-click `docker compose up -d` (root); `scripts/init-postgres.sql` is mounted by the postgres service |
 
-## OSS stack
+## Component stack
 
 | Slot | Choice |
 |------|--------|
 | Database | TimescaleDB on PostgreSQL 16 (hypertables opt-in per stream) |
-| DB REST gateway | PostgREST OSS (sidecar) |
+| DB REST gateway | PostgREST (sidecar) |
 | Object store | MinIO (S3-compatible) |
 | Streaming bus | Redpanda (Kafka API; only needed for kafka-transport streams) |
 | Audit fan-out | NATS (optional) |
@@ -97,8 +97,8 @@ var (CSV of importable module names) at FastAPI lifespan startup.
   (`server/hooks/identity.py`).
 
 With no plugin registered, `authenticate_api_key` returns
-`default_principal()` — auth is off and every caller is admin (OSS
-local-dev shape). Routers use `default_principal()` directly to
+`default_principal()` — auth is off and every caller is admin
+(local-dev shape). Routers use `default_principal()` directly to
 short-circuit auth in the unconfigured case.
 
 ## API Reference (`http://localhost:9100`)
@@ -205,9 +205,9 @@ to `.env.example` at the repo root.
 
 ## Repo Boundaries
 
-`lumid.data` is OSS-shaped and stands on its own. Upstream consumers
-must not appear in this repo — code, docs, comments, env-var examples,
-identifiers, or commit messages.
+`lumid.data` stands on its own. Upstream consumers must not appear in
+this repo — code, docs, comments, env-var examples, identifiers, or
+commit messages.
 
 - **No upstream-consumer names.** Do not reference any project that
   *consumes* lumid.data (e.g. compute engines, workflow optimizers).

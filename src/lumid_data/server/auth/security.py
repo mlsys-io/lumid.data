@@ -1,6 +1,6 @@
 """Minimal auth surface.
 
-lumid.data ships no native API-key auth. The semantic is:
+lumid.data has no native API-key auth. The semantic is:
 
 - With no `IdentityProvider` plugins registered, `authenticate_api_key`
   returns a default admin principal — auth is effectively a no-op and every
@@ -10,15 +10,11 @@ lumid.data ships no native API-key auth. The semantic is:
   through the chain in registration order. The first provider returning a
   non-`None` `PrincipalContext` wins; if none claim the token, 401 is raised.
 
-This module exists for two reasons:
-
-1. The hook protocol (`server.hooks.identity`) references `PrincipalContext`
-   as its canonical principal type. Keeping the dataclass here matches the
-   contract third-party plugins compile against.
-
-2. `authenticate_api_key` is a thin wrapper around the identity-provider
-   chain. Routers do not depend on this function today; it is kept for any
-   external user of the hook contract that wants to exercise the chain.
+`PrincipalContext` is the canonical principal type referenced by the hook
+protocol (`server.hooks.identity`); plugins compile against it.
+`authenticate_api_key` is a thin wrapper around the identity-provider
+chain. Routers do not depend on it today; it is kept so anyone wiring a
+plugin can exercise the same code path the chain runs at request time.
 """
 
 import logging

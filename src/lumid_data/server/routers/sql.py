@@ -1,8 +1,8 @@
 """``POST /sql/v1`` — psycopg passthrough running as the admin role.
 
-With no auth configured, every request runs under the admin Postgres role.
-A registered `IdentityProvider` plugin can bind a real principal; downstream
-overlays are free to add their own role-resolution shim on top.
+Every request runs under the admin Postgres role. A registered
+`IdentityProvider` plugin can bind a real principal if a deployment
+needs role-scoped queries; the binding lives in the plugin, not here.
 Multi-statement strings are rejected (one query per call).
 """
 
