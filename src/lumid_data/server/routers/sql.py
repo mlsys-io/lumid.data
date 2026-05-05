@@ -41,12 +41,7 @@ def _validate_single_statement(sql: str) -> None:
 
 
 def _libpq_dsn(url: str) -> str:
-    """Strip SQLAlchemy driver suffixes so psycopg.connect accepts the URL.
-
-    The Settings ``database_url`` uses SQLAlchemy's ``postgresql+psycopg://``
-    shape so the same field works with the SQLAlchemy meta-DB layer; raw
-    psycopg only understands ``postgresql://`` / ``postgres://``.
-    """
+    """Strip the SQLAlchemy driver suffix so raw psycopg accepts the DSN."""
     for prefix in ("postgresql+psycopg://", "postgres+psycopg://"):
         if url.startswith(prefix):
             return "postgresql://" + url[len(prefix) :]

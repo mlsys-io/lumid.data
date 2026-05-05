@@ -19,9 +19,7 @@ CREATE ROLE app_admin LOGIN PASSWORD 'app_admin';
 GRANT postgrest_anon TO app_admin;
 GRANT app_user TO app_admin;
 
--- The app boots as ``app_admin`` and runs idempotent ``CREATE SCHEMA
--- IF NOT EXISTS`` / DDL on the lumid_data_meta schema. Grant CREATE on
--- the database so those startups succeed.
+-- The app's lifespan startup runs idempotent DDL as app_admin.
 GRANT CREATE ON DATABASE lumid_data TO app_admin;
 
 -- Schema layout: the public schema holds user data; lumid_data_meta is
