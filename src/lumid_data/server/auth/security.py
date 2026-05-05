@@ -1,6 +1,6 @@
-"""Minimal auth surface for OSS.
+"""Minimal auth surface.
 
-OSS ships no native API-key auth. The semantic is:
+lumid.data ships no native API-key auth. The semantic is:
 
 - With no `IdentityProvider` plugins registered, `authenticate_api_key`
   returns a default admin principal — auth is effectively a no-op and every
@@ -17,8 +17,8 @@ This module exists for two reasons:
    contract third-party plugins compile against.
 
 2. `authenticate_api_key` is a thin wrapper around the identity-provider
-   chain. OSS routers do not depend on this function today; it is kept for
-   any external user of the hook contract that wants to exercise the chain.
+   chain. Routers do not depend on this function today; it is kept for any
+   external user of the hook contract that wants to exercise the chain.
 """
 
 import logging

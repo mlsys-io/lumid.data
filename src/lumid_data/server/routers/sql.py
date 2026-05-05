@@ -1,8 +1,8 @@
 """``POST /sql/v1`` — psycopg passthrough running as the admin role.
 
-OSS has no auth, so every request runs under the admin Postgres role.
-Cloud overlays plug into the identity hook chain to bind a real principal;
-they're free to add their own role-resolution shim on top.
+With no auth configured, every request runs under the admin Postgres role.
+A registered `IdentityProvider` plugin can bind a real principal; downstream
+overlays are free to add their own role-resolution shim on top.
 Multi-statement strings are rejected (one query per call).
 """
 
