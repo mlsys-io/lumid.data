@@ -4,8 +4,6 @@ Pure SQLAlchemy. Routers import these; the runner subscribes to them
 on lifespan startup.
 """
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from typing import Any
 

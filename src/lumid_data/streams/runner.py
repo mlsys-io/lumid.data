@@ -11,8 +11,6 @@ Webhook and websocket sources are passive — runner ignores them; their
 FastAPI handlers call ``deliver`` directly.
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 from typing import Any

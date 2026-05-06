@@ -193,15 +193,49 @@ to `.env.example` at the repo root.
 
 ## Code Style
 
+### Python
+
 - Python 3.12+. Type hints throughout.
-- Top-level imports only; inline imports only to break circular imports.
-- Pydantic v2 models for API + DB schemas.
-- `X | Y` over `typing.Union[X, Y]`; `X | None` over `typing.Optional[X]`.
-- `typing.Any` over `object` in annotations.
+- Top-level imports only; inline imports only to break a genuine
+  circular import or to gate an optional heavy dependency behind
+  `try/except`.
+- Never `importlib`. Use `from xxx import xxx` or `import xxx`.
+- Pydantic v2 models for API + DB schemas. Avoid `.get()` / `getattr`
+  when a key is known to exist.
+- Prefer `X | Y` over `typing.Union[X, Y]`; `X | None` over
+  `typing.Optional[X]`.
+- Prefer `typing.Any` over `object` in annotations. Only use `object`
+  when `Any` is semantically wrong (e.g. framework override signatures).
+- Don't write `from __future__ import annotations` unless strictly
+  necessary. Use `typing.Self` or quoted forward references instead.
+- Avoid `hasattr` / `getattr` that bypasses type checking. Use
+  `isinstance` guards. Acceptable `getattr` uses: dynamic dispatch,
+  providing a default (`getattr(obj, attr, default)`), or reaching
+  into untyped third-party libraries.
+- `# type: ignore[<error-code>]` only after exhausting alternatives.
+  Never a bare `# type: ignore`. Missing-dep type errors → add the dep
+  to `pyproject.toml`, then `uv lock`.
 - No `print()` — use the project logger.
-- No `# type: ignore` without a specific error code.
-- Default to no comments. Comment only when *why* is non-obvious.
-- No back-compat shims when updating code; replace outright.
+- In `except`, only raise. Don't swallow library errors into booleans
+  or `None`-returns. The narrow exception is a documented not-found
+  probe where the library has no list-based alternative — translate
+  only the documented missing-resource case and re-raise everything
+  else.
+- No back-compat shims when updating code; replace outright. This
+  includes re-exports, aliases, no-op stubs, and "ported from"
+  breadcrumb comments.
+
+### Comments and docstrings
+
+- Default to **no comments**. Comment only when *why* is non-obvious;
+  names self-document.
+- Don't reference the current task / fix / caller in comments ("used
+  by X", "added for Y", "handles issue #123") — those rot as the
+  codebase evolves.
+- Docstrings describe what the code *does*, not what it *replaced* or
+  what it resembles. No "in-process replacement for X", no "previously
+  did Y", no "mirrors X / parity with X". Read the docstring as if
+  seeing the code for the first time.
 
 ## Repo Boundaries
 
@@ -219,8 +253,46 @@ must keep history clean by following these rules at write time.
 
 ## Security Rules (bandit-enforced)
 
-Enforced: B113, B202, B310, B324, B506, B607, B614, B701, B108.
-Skipped rules and rationale live in `[tool.bandit]`. No bare `# nosec`.
+CI runs `bandit` with no severity / confidence threshold. Every
+finding must have a source-level fix, a documented skip in
+`[tool.bandit]` in `pyproject.toml`, or a per-line `# nosec BXXX` with
+a one-line written rationale at the call site. A bare `# nosec` (no
+rule code, no reason) is disallowed.
+
+When writing new code, follow these rules:
+
+- **B113** — every `requests.get/post/...` call passes `timeout=`. No
+  implicit defaults; hung connections are a DoS.
+- **B202** — `tarfile.extractall(..., filter="data")` (Python 3.12+).
+  For zipfile, iterate `infolist()`, validate each member resolves
+  under the destination, extract per-member. Never `zipfile.extractall`
+  on untrusted archives.
+- **B310** — don't use `urllib.request.urlopen`. Use `requests` and
+  validate the URL scheme (`http`/`https` only) before fetching.
+- **B324** — `hashlib.md5(..., usedforsecurity=False)` for cache-key /
+  fingerprint use. Never MD5 across a security boundary.
+- **B506** — `yaml.safe_load`, never `yaml.load(..., Loader=FullLoader)`.
+- **B603** — every `subprocess.run/call/Popen/...` needs a per-line
+  `# nosec B603` with a one-line rationale (e.g. `argv list, no
+  shell=True, absolute path via shutil.which()`). The B404 import-level
+  rule is project-skipped because B602/B607 catch the actually-dangerous
+  patterns; B603 is enforced per-site so every shellout is visible at
+  the call line.
+- **B607** — prefer the vendored SDK over shelling out via `nvidia-smi`
+  / `docker` / `git`. If shelling out is unavoidable, the absolute path
+  must be provided.
+- **B614** — `torch.load(..., weights_only=True)`. Pickle deserialization
+  is RCE waiting to happen.
+- **B701** — `Environment(autoescape=select_autoescape())`. The default
+  `False` is unsafe even for non-HTML templates.
+- **B108** — use `tempfile.gettempdir()` or `tempfile.NamedTemporaryFile`.
+  The literal `"/tmp"` in Python source is forbidden; for an
+  in-container sentinel, build it from `PurePosixPath` segments.
+
+Skipped rules and the rationale for each live in `[tool.bandit]`.
+When a documented skip stops being true (e.g. a sandbox stops being a
+sandbox), remove the skip and fix the call sites — don't widen the
+skip list silently.
 
 ## Commit Conventions
 
