@@ -12,6 +12,8 @@ from typing import Any
 import httpx
 
 from .schemas import (
+    RetrievalRequest,
+    RetrievalResult,
     SignedUrl,
     SqlResult,
     StorageList,
@@ -189,6 +191,73 @@ class Client:
                 json={"query": query, "params": params or []},
             )
         return SqlResult.model_validate(_ok_json(r, "sql"))
+
+    # ── /retrieve ─────────────────────────────────────────────────
+
+    def retrieve(
+        self,
+        description: str,
+        *,
+        schema_scope: str,
+        output_format: str | None = None,
+        max_steps: int | None = None,
+        model: str | None = None,
+    ) -> RetrievalResult:
+        """Plan + execute an NL-driven data retrieval, server-side.
+
+        Returns a :class:`RetrievalResult` carrying a presigned download URL
+        for the materialized file plus the lineage record (access chain,
+        run_id, transcript URL, token + step counts).
+        """
+        body = RetrievalRequest(
+            description=description,
+            schema_scope=schema_scope,
+            output_format=output_format,  # type: ignore[arg-type]
+            max_steps=max_steps,
+            model=model,
+        ).model_dump(exclude_none=True)
+        with httpx.Client(timeout=httpx.Timeout(None, connect=5.0)) as c:
+            r = c.post(
+                f"{self._base_url}/retrieve/v1",
+                headers=self._headers(),
+                json=body,
+            )
+        return RetrievalResult.model_validate(_ok_json(r, "retrieve"))
+
+    def retrieve_to_file(
+        self,
+        description: str,
+        *,
+        schema_scope: str,
+        out_path: str | Path,
+        output_format: str | None = None,
+        max_steps: int | None = None,
+        model: str | None = None,
+        verify: bool = True,
+    ) -> RetrievalResult:
+        """Convenience wrapper: ``retrieve`` + download in one call.
+
+        Materializes the result file at ``out_path``; returns the
+        :class:`RetrievalResult` (lineage + access chain) for downstream
+        bookkeeping. Avoids forcing every consumer to fetch the presigned
+        URL themselves — ergonomic for connector-style code paths.
+
+        ``verify`` controls TLS verification on the download. Self-signed
+        certs on internal MinIO endpoints commonly need ``verify=False``;
+        prefer pinning a CA bundle path when running in production.
+        """
+        result = self.retrieve(
+            description=description,
+            schema_scope=schema_scope,
+            output_format=output_format,
+            max_steps=max_steps,
+            model=model,
+        )
+        with httpx.Client(timeout=httpx.Timeout(None, connect=5.0), verify=verify) as c:
+            r = c.get(result.signed_url)
+            r.raise_for_status()
+            Path(out_path).write_bytes(r.content)
+        return result
 
     # ── /healthz ──────────────────────────────────────────────────
 
@@ -408,6 +477,62 @@ class AsyncClient:
                 json={"query": query, "params": params or []},
             )
         return SqlResult.model_validate(_ok_json(r, "sql"))
+
+    # ── /retrieve ─────────────────────────────────────────────────
+
+    async def retrieve(
+        self,
+        description: str,
+        *,
+        schema_scope: str,
+        output_format: str | None = None,
+        max_steps: int | None = None,
+        model: str | None = None,
+    ) -> RetrievalResult:
+        body = RetrievalRequest(
+            description=description,
+            schema_scope=schema_scope,
+            output_format=output_format,  # type: ignore[arg-type]
+            max_steps=max_steps,
+            model=model,
+        ).model_dump(exclude_none=True)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=5.0)) as c:
+            r = await c.post(
+                f"{self._base_url}/retrieve/v1",
+                headers=self._headers(),
+                json=body,
+            )
+        return RetrievalResult.model_validate(_ok_json(r, "retrieve"))
+
+    async def retrieve_to_file(
+        self,
+        description: str,
+        *,
+        schema_scope: str,
+        out_path: str | Path,
+        output_format: str | None = None,
+        max_steps: int | None = None,
+        model: str | None = None,
+        verify: bool = True,
+    ) -> RetrievalResult:
+        """Async retrieve + download in one call.
+
+        See :meth:`Client.retrieve_to_file` for the sync equivalent.
+        """
+        result = await self.retrieve(
+            description=description,
+            schema_scope=schema_scope,
+            output_format=output_format,
+            max_steps=max_steps,
+            model=model,
+        )
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(None, connect=5.0), verify=verify
+        ) as c:
+            r = await c.get(result.signed_url)
+            r.raise_for_status()
+            Path(out_path).write_bytes(r.content)
+        return result
 
     # ── /healthz ──────────────────────────────────────────────────
 

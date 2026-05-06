@@ -31,6 +31,25 @@ def make_client(cfg: S3Config) -> Any:
     )
 
 
+def ensure_bucket(client: Any, bucket: str) -> None:
+    """Create ``bucket`` if it doesn't already exist.
+
+    lumid.data persists schema cards and materialized retrievals into the
+    configured default bucket. A fresh deployment hits a 404 on first use
+    if the bucket isn't pre-created out-of-band; this saves operators a
+    manual ``mc mb`` step.
+    """
+    try:
+        client.head_bucket(Bucket=bucket)
+        return
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code", "")
+        if code not in {"404", "NoSuchBucket", "NotFound"}:
+            raise
+    logger.info("creating bucket %s", bucket)
+    client.create_bucket(Bucket=bucket)
+
+
 def compute_sha256(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
@@ -68,6 +87,19 @@ def stream_get(
         ),
     }
     return body.iter_chunks(chunk_size=64 * 1024), metadata
+
+
+def stat(client: Any, bucket: str, key: str) -> dict[str, Any]:
+    """Return metadata for an object without streaming its body."""
+    obj = client.head_object(Bucket=bucket, Key=key)
+    return {
+        "key": key,
+        "size": int(obj.get("ContentLength", 0)),
+        "etag": obj.get("ETag"),
+        "last_modified": (
+            obj["LastModified"].isoformat() if obj.get("LastModified") else None
+        ),
+    }
 
 
 def delete(client: Any, bucket: str, key: str) -> None:

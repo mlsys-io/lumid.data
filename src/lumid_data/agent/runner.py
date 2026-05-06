@@ -9,7 +9,6 @@ that's running the agent. The agent calls the same URLs a direct client
 would, with the user's bearer token, so RBAC + audit are uniform.
 """
 
-import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -140,105 +139,100 @@ async def run(
 
     dispatcher.tools_by_name = {t.name: t for t in tools}
 
-    try:
-        while steps < max_steps:
-            steps += 1
-            tool_calls: list[ToolCall] = []
-            text_buf: list[str] = []
-            try:
-                async for ev in adapter.stream_chat(
-                    system=system or _DEFAULT_SYSTEM,
-                    messages=messages,
-                    tools=tools,
-                    max_tokens=4096,
-                ):
-                    if ev.type == "text" and ev.text:
-                        text_buf.append(ev.text)
-                        yield RunnerEvent(type="text", payload={"text": ev.text})
-                    elif ev.type == "tool_call" and ev.tool_call is not None:
-                        tool_calls.append(ev.tool_call)
-                        yield RunnerEvent(
-                            type="tool_call",
-                            payload={
-                                "name": ev.tool_call.name,
-                                "arguments": ev.tool_call.arguments,
-                                "call_id": ev.tool_call.call_id,
-                            },
-                        )
-                    elif ev.type == "input_tokens":
-                        tokens_in += ev.tokens
-                    elif ev.type == "output_tokens":
-                        tokens_out += ev.tokens
-                    elif ev.type == "error":
-                        status = "failed"
-                        error = ev.error
-                        yield RunnerEvent(
-                            type="error", payload={"error": ev.error or ""}
-                        )
-                        return
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("adapter stream failed")
-                status = "failed"
-                error = str(exc)
-                yield RunnerEvent(type="error", payload={"error": error})
-                return
+    while steps < max_steps:
+        steps += 1
+        tool_calls: list[ToolCall] = []
+        text_buf: list[str] = []
+        try:
+            async for ev in adapter.stream_chat(
+                system=system or _DEFAULT_SYSTEM,
+                messages=messages,
+                tools=tools,
+                max_tokens=4096,
+            ):
+                if ev.type == "text" and ev.text:
+                    text_buf.append(ev.text)
+                    yield RunnerEvent(type="text", payload={"text": ev.text})
+                elif ev.type == "tool_call" and ev.tool_call is not None:
+                    tool_calls.append(ev.tool_call)
+                    yield RunnerEvent(
+                        type="tool_call",
+                        payload={
+                            "name": ev.tool_call.name,
+                            "arguments": ev.tool_call.arguments,
+                            "call_id": ev.tool_call.call_id,
+                        },
+                    )
+                elif ev.type == "input_tokens":
+                    tokens_in += ev.tokens
+                elif ev.type == "output_tokens":
+                    tokens_out += ev.tokens
+                elif ev.type == "error":
+                    status = "failed"
+                    error = ev.error
+                    yield RunnerEvent(type="error", payload={"error": ev.error or ""})
+                    return
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("adapter stream failed")
+            status = "failed"
+            error = str(exc)
+            yield RunnerEvent(type="error", payload={"error": error})
+            return
 
-            assistant_text = "".join(text_buf)
-            if assistant_text:
-                final_text_parts.append(assistant_text)
-            transcript.append(
+        assistant_text = "".join(text_buf)
+        if assistant_text:
+            final_text_parts.append(assistant_text)
+        transcript.append(
+            {
+                "step": steps,
+                "assistant_text": assistant_text,
+                "tool_calls": [
+                    {
+                        "name": tc.name,
+                        "arguments": tc.arguments,
+                        "call_id": tc.call_id,
+                    }
+                    for tc in tool_calls
+                ],
+            }
+        )
+
+        if not tool_calls:
+            break
+
+        assistant_blocks: list[dict[str, Any]] = []
+        if assistant_text:
+            assistant_blocks.append({"type": "text", "text": assistant_text})
+        for tc in tool_calls:
+            assistant_blocks.append(
                 {
-                    "step": steps,
-                    "assistant_text": assistant_text,
-                    "tool_calls": [
-                        {
-                            "name": tc.name,
-                            "arguments": tc.arguments,
-                            "call_id": tc.call_id,
-                        }
-                        for tc in tool_calls
-                    ],
+                    "type": "tool_use",
+                    "id": tc.call_id,
+                    "name": tc.name,
+                    "input": tc.arguments,
                 }
             )
+        messages.append(ChatMessage(role="assistant", content=assistant_blocks))
 
-            if not tool_calls:
-                break
+        tool_result_blocks: list[dict[str, Any]] = []
+        for tc in tool_calls:
+            result = await dispatcher.call(tc)
+            yield RunnerEvent(
+                type="tool_result",
+                payload={"call_id": tc.call_id, "result": result},
+            )
+            tool_result_blocks.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": tc.call_id,
+                    "content": json.dumps(result)[:8000],
+                }
+            )
+        messages.append(ChatMessage(role="tool", content=tool_result_blocks))
 
-            assistant_blocks: list[dict[str, Any]] = []
-            if assistant_text:
-                assistant_blocks.append({"type": "text", "text": assistant_text})
-            for tc in tool_calls:
-                assistant_blocks.append(
-                    {
-                        "type": "tool_use",
-                        "id": tc.call_id,
-                        "name": tc.name,
-                        "input": tc.arguments,
-                    }
-                )
-            messages.append(ChatMessage(role="assistant", content=assistant_blocks))
-
-            tool_result_blocks: list[dict[str, Any]] = []
-            for tc in tool_calls:
-                result = await dispatcher.call(tc)
-                yield RunnerEvent(
-                    type="tool_result",
-                    payload={"call_id": tc.call_id, "result": result},
-                )
-                tool_result_blocks.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": tc.call_id,
-                        "content": json.dumps(result)[:8000],
-                    }
-                )
-            messages.append(ChatMessage(role="tool", content=tool_result_blocks))
-
-        if steps >= max_steps:
-            status = "aborted"
-            error = "max_steps exhausted"
-    finally:
-        await asyncio.shield(adapter.aclose())
+    if steps >= max_steps:
+        status = "aborted"
+        error = "max_steps exhausted"
 
     yield RunnerEvent(
         type="done",

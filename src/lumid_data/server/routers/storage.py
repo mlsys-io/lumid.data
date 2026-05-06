@@ -95,6 +95,42 @@ async def delete_object(
     )
 
 
+@router.get("/stat/{bucket}/{path:path}", response_model=StorageObject)
+async def stat_object(
+    bucket: str,
+    path: str,
+    state: AppState = Depends(get_state),
+) -> StorageObject:
+    """Return object metadata (size, etag, last_modified) without the body.
+
+    Used during agent NL2SQL planning so the planner can verify an
+    object exists without pulling its bytes into context.
+    """
+    started = now_ms()
+    try:
+        meta = s3_svc.stat(state.s3_client, bucket, path)
+    except Exception as exc:
+        await state.audit.record(
+            principal=default_principal(),
+            surface="storage",
+            op="STAT",
+            path=f"/storage/v1/stat/{bucket}/{path}",
+            status_code=404,
+            latency_ms=now_ms() - started,
+            error=str(exc),
+        )
+        raise HTTPException(status_code=404, detail="object not found") from exc
+    await state.audit.record(
+        principal=default_principal(),
+        surface="storage",
+        op="STAT",
+        path=f"/storage/v1/stat/{bucket}/{path}",
+        status_code=200,
+        latency_ms=now_ms() - started,
+    )
+    return StorageObject.model_validate(meta)
+
+
 @router.get("/list/{bucket}", response_model=StorageList)
 async def list_bucket(
     bucket: str,

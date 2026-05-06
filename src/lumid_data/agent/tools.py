@@ -41,7 +41,7 @@ def build_tool_catalog(app: FastAPI) -> list[ToolDef]:
 
 
 def _tool_name(method: str, path: str) -> str:
-    cleaned = path.strip("/").replace("/", ".").replace("{", "").replace("}", "")
+    cleaned = path.strip("/").replace("/", "_").replace("{", "").replace("}", "")
     cleaned = cleaned.replace(":path", "").replace("__", "_")
     return f"{method.lower()}_{cleaned}".replace("-", "_")[:64]
 

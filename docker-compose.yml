@@ -1,10 +1,7 @@
 # One-click data management service.
 #
-#   docker compose up -d
-#
-# Brings up Postgres, MinIO, the PostgREST sidecar that backs /db, and
-# the lumid.data app itself. NATS is opt-in (set NATS_URL in .env to
-# enable audit fan-out) but not required.
+#   docker compose up -d                     # app only, talks to .env endpoints
+#   docker compose --profile bundled up -d   # also bring up Postgres/MinIO/PostgREST/Redpanda
 
 name: lumid-data
 
@@ -21,6 +18,7 @@ services:
   postgres:
     image: timescale/timescaledb:2.17.2-pg16
     restart: unless-stopped
+    profiles: [bundled]
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -39,6 +37,7 @@ services:
   redpanda:
     image: redpandadata/redpanda:v24.3.1
     restart: unless-stopped
+    profiles: [bundled]
     command:
       - redpanda
       - start
@@ -63,6 +62,7 @@ services:
   minio:
     image: minio/minio:RELEASE.2025-04-08T15-41-24Z
     restart: unless-stopped
+    profiles: [bundled]
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY:-lumid_data}
@@ -81,6 +81,7 @@ services:
 
   minio-init:
     image: minio/mc:RELEASE.2025-04-03T17-07-56Z
+    profiles: [bundled]
     depends_on:
       minio:
         condition: service_healthy
@@ -97,6 +98,7 @@ services:
   postgrest:
     image: postgrest/postgrest:v12.2.3
     restart: unless-stopped
+    profiles: [bundled]
     environment:
       PGRST_DB_URI: postgres://app_admin:${POSTGREST_USER_PASSWORD:-app_admin}@postgres:5432/lumid_data
       PGRST_DB_SCHEMAS: public
@@ -119,21 +121,27 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    network_mode: host
     environment:
-      DATABASE_URL: postgresql+psycopg://app_admin:${POSTGREST_USER_PASSWORD:-app_admin}@postgres:5432/lumid_data
-      S3_ENDPOINT: http://minio:9000
-      POSTGREST_URL: http://postgrest:3000
-      KAFKA_BOOTSTRAP: redpanda:9092
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://app_admin:${POSTGREST_USER_PASSWORD:-app_admin}@127.0.0.1:5432/lumid_data}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://127.0.0.1:9000}
+      POSTGREST_URL: ${POSTGREST_URL:-http://127.0.0.1:3000}
+      KAFKA_BOOTSTRAP: ${KAFKA_BOOTSTRAP:-127.0.0.1:9092}
+    volumes:
+      - ${AWS_CA_BUNDLE:-/dev/null}:${AWS_CA_BUNDLE:-/dev/null}:ro
     depends_on:
       postgres:
         condition: service_healthy
+        required: false
       minio:
         condition: service_healthy
+        required: false
       minio-init:
         condition: service_completed_successfully
+        required: false
       postgrest:
         condition: service_started
+        required: false
       redpanda:
         condition: service_healthy
-    networks: [lumid_net]
-    ports: ["9100:9100"]
+        required: false

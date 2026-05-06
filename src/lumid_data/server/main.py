@@ -19,6 +19,7 @@ from .routers import (
     db_proxy,
     health,
     mcp_mount,
+    retrieve,
     sql,
     storage,
     streams,
@@ -26,6 +27,7 @@ from .routers import (
 from .services.audit import AuditWriter, connect_nats
 from .services.postgrest_jwt import PostgrestJwtConfig
 from .services.s3 import S3Config
+from .services.s3 import ensure_bucket as ensure_s3_bucket
 from .services.s3 import make_client as make_s3_client
 from .state import AppState
 
@@ -74,6 +76,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         default_bucket=settings.s3_default_bucket,
     )
     s3_client = make_s3_client(s3_cfg)
+    ensure_s3_bucket(s3_client, settings.s3_default_bucket)
 
     postgrest_jwt = PostgrestJwtConfig(
         secret=settings.postgrest_jwt_secret,
@@ -156,6 +159,7 @@ def create_app() -> FastAPI:
     app.include_router(sql.router)
     app.include_router(streams.router)
     app.include_router(agent.router)
+    app.include_router(retrieve.router)
     app.include_router(admin.router)
 
     settings = load_settings()

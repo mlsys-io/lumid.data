@@ -15,8 +15,9 @@ RUN apt-get update \
 WORKDIR /app
 COPY pyproject.toml README.md /app/
 COPY src /app/src
+COPY sdk /app/sdk
 
-RUN pip install --upgrade pip && pip install "."
+RUN pip install --upgrade pip && pip install "./sdk" && pip install "."
 
 ENV LUMID_DATA_HTTP_PORT=9100
 EXPOSE 9100
