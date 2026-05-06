@@ -18,8 +18,8 @@ def test_routes_become_tools_with_per_method_names() -> None:
 
     tools = build_tool_catalog(app)
     names = {t.name for t in tools}
-    assert "get_db.v1.users" in names
-    assert "post_db.v1.users" in names
+    assert "get_db_v1_users" in names
+    assert "post_db_v1_users" in names
     assert all(t.input_schema for t in tools)
 
 
@@ -40,7 +40,7 @@ def test_excluded_paths_are_skipped() -> None:
 
     tools = build_tool_catalog(app)
     names = {t.name for t in tools}
-    assert "get_db.v1.x" in names
+    assert "get_db_v1_x" in names
     assert not any("agent" in n for n in names)
     assert not any("health" in n for n in names)
 
