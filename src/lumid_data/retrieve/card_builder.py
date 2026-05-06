@@ -154,32 +154,44 @@ class SchemaCardBuilder:
         """Expand a scope spec into a concrete list of tables.
 
         Supported forms:
+          - ``"*"`` — every base table in every non-system schema
           - ``"schema.*"`` — all base tables in ``schema``
           - ``"schema.table"`` — single table
           - comma-separated combinations of the above
         """
-        wildcards, explicit = _split_scope_parts(scope)
-        resolved: list[TableRef] = list(explicit)
-        if wildcards:
-            async with await psycopg.AsyncConnection.connect(
-                self._dsn, autocommit=True
-            ) as conn:
-                async with conn.cursor(row_factory=dict_row) as cur:
-                    if self._role:
-                        await cur.execute(f"SET LOCAL ROLE {self._role}")
-                    for schema in wildcards:
-                        await cur.execute(
-                            "SELECT table_name FROM information_schema.tables "
-                            "WHERE table_schema = %s AND table_type = 'BASE TABLE' "
-                            "ORDER BY table_name",
-                            (schema,),
-                        )
-                        rows = [dict(r) for r in await cur.fetchall()]
-                        for row in rows:
-                            resolved.append(
-                                TableRef(schema=schema, name=row["table_name"])
-                            )
+        async with await psycopg.AsyncConnection.connect(
+            self._dsn, autocommit=True
+        ) as conn:
+            async with conn.cursor(row_factory=dict_row) as cur:
+                if self._role:
+                    await cur.execute(f"SET LOCAL ROLE {self._role}")
+                if scope.strip() == "*":
+                    wildcards = await self._list_user_schemas(cur)
+                    explicit: list[TableRef] = []
+                else:
+                    wildcards, explicit = _split_scope_parts(scope)
+                resolved: list[TableRef] = list(explicit)
+                for schema in wildcards:
+                    await cur.execute(
+                        "SELECT table_name FROM information_schema.tables "
+                        "WHERE table_schema = %s AND table_type = 'BASE TABLE' "
+                        "ORDER BY table_name",
+                        (schema,),
+                    )
+                    rows = [dict(r) for r in await cur.fetchall()]
+                    for row in rows:
+                        resolved.append(TableRef(schema=schema, name=row["table_name"]))
         return _dedupe_tables(resolved)
+
+    async def _list_user_schemas(self, cur: Any) -> list[str]:
+        await cur.execute(
+            "SELECT nspname FROM pg_namespace "
+            "WHERE nspname NOT LIKE 'pg\\_%' ESCAPE '\\' "
+            "  AND nspname NOT IN ('information_schema', 'lumid_data_meta') "
+            "ORDER BY nspname"
+        )
+        rows = [dict(r) for r in await cur.fetchall()]
+        return [row["nspname"] for row in rows]
 
     async def _build_card(self, cur: Any, table: TableRef) -> SchemaCard:
         approx_rows = await self._approx_rowcount(cur, table)
