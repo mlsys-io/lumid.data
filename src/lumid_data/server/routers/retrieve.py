@@ -53,11 +53,6 @@ async def retrieve(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="LLM adapter not configured",
         )
-    if not body.schema_scope:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="schema_scope is required (e.g. 'star.*' or 'star.x,star.y')",
-        )
 
     settings = state.settings
     principal = default_principal()
@@ -65,13 +60,20 @@ async def retrieve(
     started = now_ms()
     bucket = settings.s3_default_bucket
     output_format = body.output_format or "jsonl"
+    scope = (body.schema_scope or "*").strip()
 
     builder = SchemaCardBuilder(
         dsn=_libpq(state.settings.database_url),
         role=settings.postgrest_admin_role,
     )
     cache = SchemaCardCache(builder=builder, s3_client=state.s3_client, bucket=bucket)
-    bundle = await cache.get(body.schema_scope)
+    try:
+        bundle = await cache.get(scope)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"invalid schema_scope: {exc}",
+        ) from exc
 
     app = _resolve_app(state)
     planner = RetrievalPlanner(
