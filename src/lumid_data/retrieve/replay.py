@@ -156,27 +156,37 @@ class PlanReplayer:
                 async with conn.cursor(row_factory=dict_row) as cur:
                     await cur.execute(f"SET LOCAL ROLE {self._admin_role}")
                     for op in plan.plan:
-                        if isinstance(op, RetrievalSqlOp):
-                            n = await self._run_sql_op(cur, op, writer)
-                            access.append(
-                                AccessStep(
-                                    op="sql",
-                                    query=op.query,
-                                    rows_or_bytes=n,
+                        try:
+                            if isinstance(op, RetrievalSqlOp):
+                                n = await self._run_sql_op(cur, op, writer)
+                                access.append(
+                                    AccessStep(
+                                        op="sql",
+                                        query=op.query,
+                                        rows_or_bytes=n,
+                                    )
                                 )
-                            )
-                            rowcount += n
-                        elif isinstance(op, RetrievalStorageGetOp):
-                            n = self._run_storage_op_into_jsonl(op, writer)
-                            access.append(
-                                AccessStep(
-                                    op="storage_get",
-                                    bucket=op.bucket,
-                                    key=op.key,
-                                    rows_or_bytes=n,
+                                rowcount += n
+                            elif isinstance(op, RetrievalStorageGetOp):
+                                n = self._run_storage_op_into_jsonl(op, writer)
+                                access.append(
+                                    AccessStep(
+                                        op="storage_get",
+                                        bucket=op.bucket,
+                                        key=op.key,
+                                        rows_or_bytes=n,
+                                    )
                                 )
+                                rowcount += 1
+                        except ReplayError:
+                            raise
+                        except Exception as exc:
+                            kind = (
+                                "sql"
+                                if isinstance(op, RetrievalSqlOp)
+                                else "storage_get"
                             )
-                            rowcount += 1
+                            raise ReplayError(f"{kind} op failed: {exc}") from exc
         size_bytes = out_path.stat().st_size
         return rowcount, size_bytes
 
@@ -195,10 +205,13 @@ class PlanReplayer:
             )
         op = plan.plan[0]
         size_bytes = 0
-        with out_path.open("wb") as out:
-            for chunk in self._stream_object(op.bucket, op.key):
-                out.write(chunk)
-                size_bytes += len(chunk)
+        try:
+            with out_path.open("wb") as out:
+                for chunk in self._stream_object(op.bucket, op.key):
+                    out.write(chunk)
+                    size_bytes += len(chunk)
+        except Exception as exc:
+            raise ReplayError(f"storage_get op failed: {exc}") from exc
         access.append(
             AccessStep(
                 op="storage_get",
