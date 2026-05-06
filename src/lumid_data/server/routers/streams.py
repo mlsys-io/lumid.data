@@ -5,8 +5,6 @@ so the data agent can register, start, monitor, and replay streams
 through normal HTTP.
 """
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from typing import Any, Literal
 

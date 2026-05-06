@@ -34,7 +34,9 @@ def _docker_compose() -> str:
 def _run(args: list[str]) -> None:
     cmd = [_docker_compose(), "compose", *args]
     typer.echo("$ " + " ".join(cmd))
-    proc = subprocess.run(cmd, cwd=_compose_dir(), check=False)
+    proc = subprocess.run(
+        cmd, cwd=_compose_dir(), check=False
+    )  # nosec B603 — argv list, no shell=True, docker path resolved via shutil.which
     if proc.returncode != 0:
         sys.exit(proc.returncode)
 

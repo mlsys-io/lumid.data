@@ -4,8 +4,6 @@ Uses an in-memory SQLite DB and stubs the runner's deliver path so we
 exercise the HTTP layer end-to-end without a real Postgres or S3.
 """
 
-from __future__ import annotations
-
 from typing import Any
 from unittest.mock import AsyncMock
 

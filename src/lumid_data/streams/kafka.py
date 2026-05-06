@@ -5,8 +5,6 @@ The bootstrap address falls back to ``Settings.kafka_bootstrap`` when
 the descriptor leaves it unset, so most descriptors only need a topic.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 from collections.abc import AsyncIterator

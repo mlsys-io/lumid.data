@@ -4,8 +4,6 @@ A sink descriptor is a plain dict pulled from ``stream_sources.sink``.
 Routing happens via ``write(sink, msg, ctx)``: switch on ``sink['kind']``.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 from dataclasses import dataclass
