@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from lumid_data.sdk.schemas import (
     SignedUrl,
+    StorageBucketResult,
     StorageList,
     StorageObject,
     StoragePutResult,
@@ -48,6 +49,26 @@ async def get_object(
         media_type=meta.get("content_type") or "application/octet-stream",
         headers=headers,
     )
+
+
+@router.post("/bucket/{bucket}", response_model=StorageBucketResult)
+async def ensure_bucket(
+    bucket: str,
+    state: AppState = Depends(get_state),
+) -> StorageBucketResult:
+    """Idempotently create ``bucket``. Returns whether it was just created."""
+    started = now_ms()
+    created = s3_svc.ensure_bucket(state.s3_client, bucket)
+    await state.audit.record(
+        principal=default_principal(),
+        surface="storage",
+        op="ENSURE_BUCKET",
+        path=f"/storage/v1/bucket/{bucket}",
+        status_code=201 if created else 200,
+        latency_ms=now_ms() - started,
+        request_meta={"created": created},
+    )
+    return StorageBucketResult(bucket=bucket, created=created)
 
 
 @router.put(

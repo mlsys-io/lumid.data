@@ -6,6 +6,7 @@ from lumid_data.server.services.s3 import (
     S3Config,
     compute_sha256,
     delete,
+    ensure_bucket,
     list_objects,
     put_idempotent,
     stream_get,
@@ -71,3 +72,17 @@ def test_delete(s3) -> None:
 
 def test_compute_sha256_deterministic() -> None:
     assert compute_sha256(b"x") == compute_sha256(b"x")
+
+
+def test_ensure_bucket_creates_then_idempotent(s3) -> None:
+    _, client = s3
+    assert ensure_bucket(client, "fresh-bucket") is True
+    assert ensure_bucket(client, "fresh-bucket") is False
+
+
+def test_put_idempotent_auto_creates_bucket(s3) -> None:
+    _, client = s3
+    uri = put_idempotent(client, "auto-create-bucket", "k.txt", b"hi", "text/plain")
+    assert uri == "s3://auto-create-bucket/k.txt"
+    chunks, _ = stream_get(client, "auto-create-bucket", "k.txt")
+    assert b"".join(chunks) == b"hi"

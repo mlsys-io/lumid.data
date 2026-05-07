@@ -31,8 +31,8 @@ def make_client(cfg: S3Config) -> Any:
     )
 
 
-def ensure_bucket(client: Any, bucket: str) -> None:
-    """Create ``bucket`` if it doesn't already exist.
+def ensure_bucket(client: Any, bucket: str) -> bool:
+    """Create ``bucket`` if it doesn't already exist; return whether it was just created.
 
     lumid.data persists schema cards and materialized retrievals into the
     configured default bucket. A fresh deployment hits a 404 on first use
@@ -41,13 +41,14 @@ def ensure_bucket(client: Any, bucket: str) -> None:
     """
     try:
         client.head_bucket(Bucket=bucket)
-        return
+        return False
     except ClientError as exc:
         code = exc.response.get("Error", {}).get("Code", "")
         if code not in {"404", "NoSuchBucket", "NotFound"}:
             raise
     logger.info("creating bucket %s", bucket)
     client.create_bucket(Bucket=bucket)
+    return True
 
 
 def compute_sha256(payload: bytes) -> str:
@@ -57,19 +58,30 @@ def compute_sha256(payload: bytes) -> str:
 def put_idempotent(
     client: Any, bucket: str, key: str, payload: bytes, content_type: str | None
 ) -> str:
-    """Write payload to s3://bucket/key. No-op if HEAD already returns 200."""
+    """Write payload to s3://bucket/key. No-op if HEAD already returns 200.
+
+    Auto-creates the bucket on the first PUT to a previously unknown name so
+    that callers don't need a separate bootstrap step. The HEAD-bucket inside
+    ``ensure_bucket`` is the only extra round-trip and only fires on the
+    NoSuchBucket fallback path.
+    """
     try:
         client.head_object(Bucket=bucket, Key=key)
         return f"s3://{bucket}/{key}"
     except ClientError as exc:
-        if exc.response.get("Error", {}).get("Code") not in {
-            "404",
-            "NoSuchKey",
-            "NotFound",
-        }:
+        code = exc.response.get("Error", {}).get("Code", "")
+        if code in {"NoSuchBucket"}:
+            ensure_bucket(client, bucket)
+        elif code not in {"404", "NoSuchKey", "NotFound"}:
             raise
     extra: dict[str, str] = {"ContentType": content_type} if content_type else {}
-    client.put_object(Bucket=bucket, Key=key, Body=payload, **extra)
+    try:
+        client.put_object(Bucket=bucket, Key=key, Body=payload, **extra)
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") != "NoSuchBucket":
+            raise
+        ensure_bucket(client, bucket)
+        client.put_object(Bucket=bucket, Key=key, Body=payload, **extra)
     return f"s3://{bucket}/{key}"
 
 
