@@ -1,6 +1,8 @@
 """S3 helpers unit tests with botocore Stubber."""
 
+import boto3
 import pytest
+from moto import mock_aws
 
 from lumid_data.server.services.s3 import (
     S3Config,
@@ -15,10 +17,6 @@ from lumid_data.server.services.s3 import (
 
 @pytest.fixture
 def s3():
-    pytest.importorskip("moto")
-    import boto3
-    from moto import mock_aws
-
     with mock_aws():
         cfg = S3Config(
             endpoint="",  # moto intercepts boto3.client without an endpoint_url

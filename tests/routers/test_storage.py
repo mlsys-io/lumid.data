@@ -2,17 +2,15 @@
 
 from unittest.mock import AsyncMock, MagicMock
 
+import boto3
 import pytest
+from moto import mock_aws
 
 from lumid_data.server.routers.storage import ensure_bucket as ensure_bucket_route
 
 
 @pytest.mark.asyncio
 async def test_ensure_bucket_first_call_reports_created() -> None:
-    pytest.importorskip("moto")
-    import boto3
-    from moto import mock_aws
-
     state = MagicMock()
     state.audit.record = AsyncMock()
     with mock_aws():
@@ -29,10 +27,6 @@ async def test_ensure_bucket_first_call_reports_created() -> None:
 
 @pytest.mark.asyncio
 async def test_ensure_bucket_second_call_reports_existing() -> None:
-    pytest.importorskip("moto")
-    import boto3
-    from moto import mock_aws
-
     state = MagicMock()
     state.audit.record = AsyncMock()
     with mock_aws():
