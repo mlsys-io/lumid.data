@@ -25,6 +25,11 @@ class StoragePutResult(BaseModel):
     sha256: str
 
 
+class StorageBucketResult(BaseModel):
+    bucket: str
+    created: bool
+
+
 class SignedUrl(BaseModel):
     url: str
     expires: int

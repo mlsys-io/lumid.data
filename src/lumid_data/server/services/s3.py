@@ -8,6 +8,7 @@ from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError
+from mypy_boto3_s3 import S3Client
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ class S3Config:
     default_bucket: str
 
 
-def make_client(cfg: S3Config) -> Any:
+def make_client(cfg: S3Config) -> S3Client:
     return boto3.client(
         "s3",
         endpoint_url=cfg.endpoint,
@@ -31,8 +32,8 @@ def make_client(cfg: S3Config) -> Any:
     )
 
 
-def ensure_bucket(client: Any, bucket: str) -> None:
-    """Create ``bucket`` if it doesn't already exist.
+def ensure_bucket(client: S3Client, bucket: str) -> bool:
+    """Create ``bucket`` if it doesn't exist; return whether it was just created.
 
     lumid.data persists schema cards and materialized retrievals into the
     configured default bucket. A fresh deployment hits a 404 on first use
@@ -41,13 +42,13 @@ def ensure_bucket(client: Any, bucket: str) -> None:
     """
     try:
         client.head_bucket(Bucket=bucket)
-        return
+        return False
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "")
-        if code not in {"404", "NoSuchBucket", "NotFound"}:
+        if exc.response["Error"]["Code"] not in {"404", "NotFound"}:
             raise
-    logger.info("creating bucket %s", bucket)
     client.create_bucket(Bucket=bucket)
+    logger.info("created bucket %s", bucket)
+    return True
 
 
 def compute_sha256(payload: bytes) -> str:
@@ -55,26 +56,46 @@ def compute_sha256(payload: bytes) -> str:
 
 
 def put_idempotent(
-    client: Any, bucket: str, key: str, payload: bytes, content_type: str | None
+    client: S3Client, bucket: str, key: str, payload: bytes, content_type: str | None
 ) -> str:
-    """Write payload to s3://bucket/key. No-op if HEAD already returns 200."""
+    """Write payload to s3://bucket/key. No-op if HEAD already returns 200.
+
+    Auto-creates the bucket on the first PUT to a previously unknown name so
+    that callers don't need a separate bootstrap step.
+    """
     try:
         client.head_object(Bucket=bucket, Key=key)
         return f"s3://{bucket}/{key}"
+    except client.exceptions.NoSuchBucket:
+        ensure_bucket(client, bucket)
     except ClientError as exc:
-        if exc.response.get("Error", {}).get("Code") not in {
-            "404",
-            "NoSuchKey",
-            "NotFound",
-        }:
+        if exc.response["Error"]["Code"] not in {"404", "NoSuchKey", "NotFound"}:
             raise
-    extra: dict[str, str] = {"ContentType": content_type} if content_type else {}
-    client.put_object(Bucket=bucket, Key=key, Body=payload, **extra)
+    try:
+        _put_object(client, bucket, key, payload, content_type)
+    except client.exceptions.NoSuchBucket:
+        ensure_bucket(client, bucket)
+        _put_object(client, bucket, key, payload, content_type)
     return f"s3://{bucket}/{key}"
 
 
+def _put_object(
+    client: S3Client,
+    bucket: str,
+    key: str,
+    payload: bytes,
+    content_type: str | None,
+) -> None:
+    if content_type:
+        client.put_object(
+            Bucket=bucket, Key=key, Body=payload, ContentType=content_type
+        )
+    else:
+        client.put_object(Bucket=bucket, Key=key, Body=payload)
+
+
 def stream_get(
-    client: Any, bucket: str, key: str
+    client: S3Client, bucket: str, key: str
 ) -> tuple[Iterable[bytes], dict[str, Any]]:
     obj = client.get_object(Bucket=bucket, Key=key)
     body = obj["Body"]
@@ -89,7 +110,7 @@ def stream_get(
     return body.iter_chunks(chunk_size=64 * 1024), metadata
 
 
-def stat(client: Any, bucket: str, key: str) -> dict[str, Any]:
+def stat(client: S3Client, bucket: str, key: str) -> dict[str, Any]:
     """Return metadata for an object without streaming its body."""
     obj = client.head_object(Bucket=bucket, Key=key)
     return {
@@ -102,12 +123,12 @@ def stat(client: Any, bucket: str, key: str) -> dict[str, Any]:
     }
 
 
-def delete(client: Any, bucket: str, key: str) -> None:
+def delete(client: S3Client, bucket: str, key: str) -> None:
     client.delete_object(Bucket=bucket, Key=key)
 
 
 def list_objects(
-    client: Any, bucket: str, prefix: str | None = None, limit: int = 100
+    client: S3Client, bucket: str, prefix: str | None = None, limit: int = 100
 ) -> list[dict[str, Any]]:
     kwargs: dict[str, Any] = {"Bucket": bucket, "MaxKeys": min(limit, 1000)}
     if prefix:
@@ -127,7 +148,11 @@ def list_objects(
 
 
 def presign_put(
-    client: Any, bucket: str, key: str, expires_sec: int, content_type: str | None
+    client: S3Client,
+    bucket: str,
+    key: str,
+    expires_sec: int,
+    content_type: str | None,
 ) -> str:
     params: dict[str, Any] = {"Bucket": bucket, "Key": key}
     if content_type:
@@ -137,7 +162,7 @@ def presign_put(
     )
 
 
-def presign_get(client: Any, bucket: str, key: str, expires_sec: int) -> str:
+def presign_get(client: S3Client, bucket: str, key: str, expires_sec: int) -> str:
     return client.generate_presigned_url(
         "get_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=expires_sec
     )
