@@ -2,6 +2,7 @@
 
 import logging
 
+from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from lumid_data.sdk.schemas import (
@@ -22,6 +23,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/storage/v1", tags=["storage"])
 
+_S3_NOT_FOUND_CODES = {"NoSuchKey", "NoSuchBucket", "404"}
+
 
 @router.get("/object/{bucket}/{path:path}")
 async def get_object(
@@ -30,7 +33,21 @@ async def get_object(
     state: AppState = Depends(get_state),
 ) -> StreamingResponse:
     started = now_ms()
-    chunks, meta = s3_svc.stream_get(state.s3_client, bucket, path)
+    try:
+        chunks, meta = s3_svc.stream_get(state.s3_client, bucket, path)
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") in _S3_NOT_FOUND_CODES:
+            await state.audit.record(
+                principal=default_principal(),
+                surface="storage",
+                op="GET",
+                path=f"/storage/v1/object/{bucket}/{path}",
+                status_code=404,
+                latency_ms=now_ms() - started,
+                error=str(exc),
+            )
+            raise HTTPException(status_code=404, detail="object not found") from exc
+        raise
     headers = {}
     if meta.get("content_type"):
         headers["Content-Type"] = meta["content_type"]
@@ -130,7 +147,9 @@ async def stat_object(
     started = now_ms()
     try:
         meta = s3_svc.stat(state.s3_client, bucket, path)
-    except Exception as exc:
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") not in _S3_NOT_FOUND_CODES:
+            raise
         await state.audit.record(
             principal=default_principal(),
             surface="storage",
