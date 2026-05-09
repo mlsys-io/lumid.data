@@ -40,7 +40,7 @@ class SqlResult(BaseModel):
     rowcount: int
 
 
-# ── /retrieve/v1 ───────────────────────────────────────────────────────
+# ── agent retrieval tool models ────────────────────────────────────────
 
 
 class RetrievalSqlOp(BaseModel):

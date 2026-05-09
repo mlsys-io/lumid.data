@@ -80,7 +80,7 @@ async def _execute(
         ) as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(f"SET LOCAL ROLE {role}")
-                await cur.execute(query, params)
+                await cur.execute(query, params or None)
                 rowcount = cur.rowcount
                 if cur.description is not None:
                     rows = [dict(r) for r in await cur.fetchall()]

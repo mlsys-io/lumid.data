@@ -5,6 +5,7 @@ import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -15,16 +16,35 @@ from ...utils.ids import new_run_id
 from ..auth.security import default_principal
 from ..deps import get_state
 from ..services.audit import now_ms
+from ..services.retrieval_tools import (
+    retrieval_tool_defs,
+    retrieval_tool_handlers,
+)
+from ..skills import UnknownSkillError, render_skill_prompt, skill_tool_allowlist
+from ..skills import (
+    skill_required_success_tools,
+    skill_required_tools_message,
+    skill_tool_result_visibility,
+)
 from ..state import AppState
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agent/v1", tags=["agent"])
 
+_AGENT_SYSTEM = (
+    "You are the lumid.data agent. The user describes a data-management "
+    "intent in natural language; you accomplish it by calling the registered "
+    "tools. Each tool corresponds to a data-plane operation on the same "
+    "service. Prefer bounded inspection before materializing data, and explain "
+    "what you did at the end."
+)
+
 
 class AgentRequest(BaseModel):
     goal: str = Field(..., min_length=1, max_length=20_000)
     context: dict | None = None
+    skills: list[str] | None = None
     tools_allowed: list[str] | None = None
     max_steps: int | None = Field(None, ge=1, le=100)
     model: str | None = None
@@ -44,6 +64,14 @@ async def run_agent_endpoint(
     principal = default_principal()
     run_id = new_run_id()
     started = now_ms()
+    try:
+        system_prompt = _AGENT_SYSTEM + render_skill_prompt(body.skills)
+        skill_tools = skill_tool_allowlist(body.skills)
+        required_success_tools = skill_required_success_tools(body.skills)
+        required_tools_message = skill_required_tools_message(body.skills)
+        tool_result_visibility = skill_tool_result_visibility(body.skills)
+    except UnknownSkillError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     async def stream():
         async with state.sessionmaker() as session:
@@ -59,14 +87,28 @@ async def run_agent_endpoint(
             await session.commit()
 
         app = state_to_app(state)
-        all_tools = build_tool_catalog(app)
-        if body.tools_allowed:
+        all_tools = [*build_tool_catalog(app), *retrieval_tool_defs()]
+        if skill_tools is not None and body.tools_allowed:
+            allowed = skill_tools & set(body.tools_allowed)
+        elif skill_tools is not None:
+            allowed = skill_tools
+        elif body.tools_allowed:
             allowed = set(body.tools_allowed)
+        else:
+            allowed = None
+        if allowed is not None:
             tools = [t for t in all_tools if t.name in allowed]
         else:
             tools = all_tools
         dispatcher = build_dispatcher_from_app(
             app, base_url=settings.base_url, bearer=None
+        )
+        dispatcher.local_tools.update(
+            retrieval_tool_handlers(
+                state=state,
+                principal=principal,
+                agent_run_id=run_id,
+            )
         )
         emitted_done: dict | None = None
         try:
@@ -76,6 +118,10 @@ async def run_agent_endpoint(
                 dispatcher=dispatcher,
                 goal=body.goal,
                 max_steps=body.max_steps or settings.agent_max_steps,
+                system=system_prompt,
+                required_success_tools=required_success_tools,
+                required_tools_message=required_tools_message,
+                tool_result_visibility=tool_result_visibility,
             ):
                 yield _sse(ev.type, ev.payload)
                 if ev.type == "done":
@@ -123,7 +169,7 @@ async def run_agent_endpoint(
 
 
 def _sse(event: str, data: dict | str) -> bytes:
-    body = data if isinstance(data, str) else json.dumps(data)
+    body = data if isinstance(data, str) else json.dumps(jsonable_encoder(data))
     return f"event: {event}\ndata: {body}\n\n".encode()
 
 

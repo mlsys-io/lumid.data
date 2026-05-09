@@ -19,7 +19,6 @@ from .routers import (
     db_proxy,
     health,
     mcp_mount,
-    retrieve,
     sql,
     storage,
     streams,
@@ -159,7 +158,6 @@ def create_app() -> FastAPI:
     app.include_router(sql.router)
     app.include_router(streams.router)
     app.include_router(agent.router)
-    app.include_router(retrieve.router)
     app.include_router(admin.router)
 
     settings = load_settings()

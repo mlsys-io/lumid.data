@@ -45,7 +45,6 @@ htmlcov/
 .env.bak
 
 # Scratch / agent space (matches upstream convention)
-agent_space/
 *.bak
 *.tmp
 results/

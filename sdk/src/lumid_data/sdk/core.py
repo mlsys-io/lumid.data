@@ -192,7 +192,7 @@ class Client:
             )
         return SqlResult.model_validate(_ok_json(r, "sql"))
 
-    # ── /retrieve ─────────────────────────────────────────────────
+    # ── agent retrieval ───────────────────────────────────────────
 
     def retrieve(
         self,
@@ -203,26 +203,59 @@ class Client:
         max_steps: int | None = None,
         model: str | None = None,
     ) -> RetrievalResult:
-        """Plan + execute an NL-driven data retrieval, server-side.
+        """Plan + execute an NL-driven data retrieval through ``/agent/v1``.
 
         Returns a :class:`RetrievalResult` carrying a presigned download URL
         for the materialized file plus the lineage record (access chain,
         run_id, transcript URL, token + step counts).
         """
-        body = RetrievalRequest(
+        request = RetrievalRequest(
             description=description,
             schema_scope=schema_scope,
             output_format=output_format,  # type: ignore[arg-type]
             max_steps=max_steps,
             model=model,
-        ).model_dump(exclude_none=True)
-        with httpx.Client(timeout=httpx.Timeout(None, connect=5.0)) as c:
-            r = c.post(
-                f"{self._base_url}/retrieve/v1",
-                headers=self._headers(),
-                json=body,
+        )
+        result: RetrievalResult | None = None
+        last_error: Any = None
+        for event, payload in self.agent_run(
+            _retrieve_goal(request),
+            skills=["data_retrieval"],
+            tools_allowed=_RETRIEVAL_TOOL_ALLOWLIST,
+            max_steps=max_steps,
+            model=model,
+        ):
+            if event == "tool_result":
+                if payload.get("name") != "replay_retrieval_plan":
+                    continue
+                tool_result = payload.get("result", {})
+                if tool_result.get("status_code", 500) < 300:
+                    body = tool_result.get("body")
+                    if isinstance(body, dict) and "materialized_uri" in body:
+                        result = RetrievalResult.model_validate(body)
+                else:
+                    last_error = tool_result.get("body")
+            elif event == "error":
+                last_error = payload
+            elif event == "done":
+                if result is not None:
+                    result.tokens_in = int(payload.get("tokens_in", result.tokens_in))
+                    result.tokens_out = int(
+                        payload.get("tokens_out", result.tokens_out)
+                    )
+                    result.steps_taken = int(payload.get("steps", result.steps_taken))
+                else:
+                    last_error = {
+                        "status": payload.get("status"),
+                        "error": payload.get("error"),
+                        "steps": payload.get("steps"),
+                        "final_text": payload.get("final_text"),
+                    }
+        if result is None:
+            raise ClientError(
+                f"retrieve failed: {last_error or 'no materialized result'}"
             )
-        return RetrievalResult.model_validate(_ok_json(r, "retrieve"))
+        return result
 
     def retrieve_to_file(
         self,
@@ -273,6 +306,7 @@ class Client:
         goal: str,
         *,
         context: dict[str, Any] | None = None,
+        skills: list[str] | None = None,
         tools_allowed: list[str] | None = None,
         max_steps: int | None = None,
         model: str | None = None,
@@ -285,6 +319,8 @@ class Client:
         body: dict[str, Any] = {"goal": goal}
         if context is not None:
             body["context"] = context
+        if skills is not None:
+            body["skills"] = skills
         if tools_allowed is not None:
             body["tools_allowed"] = tools_allowed
         if max_steps is not None:
@@ -478,7 +514,7 @@ class AsyncClient:
             )
         return SqlResult.model_validate(_ok_json(r, "sql"))
 
-    # ── /retrieve ─────────────────────────────────────────────────
+    # ── agent retrieval ───────────────────────────────────────────
 
     async def retrieve(
         self,
@@ -489,20 +525,53 @@ class AsyncClient:
         max_steps: int | None = None,
         model: str | None = None,
     ) -> RetrievalResult:
-        body = RetrievalRequest(
+        request = RetrievalRequest(
             description=description,
             schema_scope=schema_scope,
             output_format=output_format,  # type: ignore[arg-type]
             max_steps=max_steps,
             model=model,
-        ).model_dump(exclude_none=True)
-        async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=5.0)) as c:
-            r = await c.post(
-                f"{self._base_url}/retrieve/v1",
-                headers=self._headers(),
-                json=body,
+        )
+        result: RetrievalResult | None = None
+        last_error: Any = None
+        async for event, payload in self.agent_run(
+            _retrieve_goal(request),
+            skills=["data_retrieval"],
+            tools_allowed=_RETRIEVAL_TOOL_ALLOWLIST,
+            max_steps=max_steps,
+            model=model,
+        ):
+            if event == "tool_result":
+                if payload.get("name") != "replay_retrieval_plan":
+                    continue
+                tool_result = payload.get("result", {})
+                if tool_result.get("status_code", 500) < 300:
+                    body = tool_result.get("body")
+                    if isinstance(body, dict) and "materialized_uri" in body:
+                        result = RetrievalResult.model_validate(body)
+                else:
+                    last_error = tool_result.get("body")
+            elif event == "error":
+                last_error = payload
+            elif event == "done":
+                if result is not None:
+                    result.tokens_in = int(payload.get("tokens_in", result.tokens_in))
+                    result.tokens_out = int(
+                        payload.get("tokens_out", result.tokens_out)
+                    )
+                    result.steps_taken = int(payload.get("steps", result.steps_taken))
+                else:
+                    last_error = {
+                        "status": payload.get("status"),
+                        "error": payload.get("error"),
+                        "steps": payload.get("steps"),
+                        "final_text": payload.get("final_text"),
+                    }
+        if result is None:
+            raise ClientError(
+                f"retrieve failed: {last_error or 'no materialized result'}"
             )
-        return RetrievalResult.model_validate(_ok_json(r, "retrieve"))
+        return result
 
     async def retrieve_to_file(
         self,
@@ -567,6 +636,38 @@ def _ok_json(resp: httpx.Response, op: str) -> Any:
     if resp.status_code >= 300:
         raise ClientError(f"{op} failed ({resp.status_code}): {resp.text}")
     return resp.json() if resp.content else None
+
+
+_RETRIEVAL_TOOL_ALLOWLIST = [
+    "get_schema_cards",
+    "post_sql_v1_explain",
+    "post_sql_v1_count",
+    "post_sql_v1_sample",
+    "get_storage_v1_list_bucket",
+    "get_storage_v1_stat_bucket_path",
+    "replay_retrieval_plan",
+]
+
+
+def _retrieve_goal(request: RetrievalRequest) -> str:
+    parts = [
+        "Handle this as a data retrieval workflow.",
+        f"User request: {request.description}",
+        "Use get_schema_cards first.",
+        "Use explain/count/sample preview-stat probes when needed.",
+        "Use SQL identifiers from schema cards exactly, including double quotes.",
+        "Compose the final SQL/storage retrieval plan yourself.",
+        "Call replay_retrieval_plan to materialize the result.",
+        "If replay returns an SQL error, fix the plan and call replay again.",
+        "Do not call tools that return full rows or object bytes to the model.",
+        "After replay, summarize only preview/stat metadata such as row count "
+        "and size; do not try to view the full materialized result.",
+    ]
+    if request.schema_scope:
+        parts.append(f"Schema scope: {request.schema_scope}")
+    if request.output_format:
+        parts.append(f"Output format: {request.output_format}")
+    return "\n".join(parts)
 
 
 def _iter_sse(lines: Iterator[str]) -> Iterator[tuple[str, Any]]:
