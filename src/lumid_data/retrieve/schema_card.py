@@ -11,8 +11,8 @@ Snowflake Cortex Analyst's YAML semantic model (verified queries,
 synonyms) + Databricks Genie (value dictionaries).
 """
 
-from datetime import UTC, datetime
 import re
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field

@@ -3,7 +3,6 @@
 from collections.abc import Iterator
 
 import pytest
-
 from lumid_data.sdk.core import Client, ClientError
 
 

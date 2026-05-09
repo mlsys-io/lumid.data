@@ -5,10 +5,10 @@ import pytest
 from lumid_data.server.skills import (
     UnknownSkillError,
     render_skill_prompt,
+    skill_names,
     skill_required_success_tools,
     skill_required_tools_message,
     skill_tool_allowlist,
-    skill_names,
     skill_tool_result_visibility,
 )
 
@@ -32,9 +32,7 @@ def test_data_retrieval_skill_allows_only_preview_stats_and_replay_tools() -> No
 
 
 def test_data_retrieval_skill_requires_replay_success() -> None:
-    assert skill_required_success_tools(["data_retrieval"]) == {
-        "replay_retrieval_plan"
-    }
+    assert skill_required_success_tools(["data_retrieval"]) == {"replay_retrieval_plan"}
     message = skill_required_tools_message(["data_retrieval"])
     assert message is not None
     assert "replay_retrieval_plan" in message
