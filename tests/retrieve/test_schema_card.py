@@ -20,7 +20,23 @@ def test_minimal_card_renders_table_name_and_columns():
     )
     text = render_card_for_prompt(card)
     assert "# Table: schema.t" in text
+    assert "# Use SQL identifiers exactly as shown below." in text
     assert "(id:int PK,NOT NULL" in text
+
+
+def test_card_quotes_case_sensitive_identifiers():
+    card = SchemaCard(
+        fqname="schema.t",
+        columns=[
+            ColumnCard(name="grossProfit", type="numeric", nullable=True),
+            ColumnCard(name="operatingIncome", type="numeric", nullable=True),
+            ColumnCard(name="plain_name", type="numeric", nullable=True),
+        ],
+    )
+    text = render_card_for_prompt(card)
+    assert '("grossProfit":numeric' in text
+    assert '("operatingIncome":numeric' in text
+    assert "(plain_name:numeric" in text
 
 
 def test_card_includes_stats_when_present():

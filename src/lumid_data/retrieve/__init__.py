@@ -1,17 +1,16 @@
-"""Retrieval pipeline — schema-card-driven NL2SQL planning + replay.
+"""Retrieval support — schema cards, structured-plan validation, and replay.
 
-The pipeline is internal to ``/retrieve/v1`` (see ``server/routers/retrieve.py``):
+The public entrypoint is the data agent. Retrieval is implemented as
+deterministic tools behind ``/agent/v1``:
 
 1. ``schema_card.SchemaCardBuilder`` — introspects Postgres into per-table cards
    (M-Schema-shaped: name, description, approx rowcount, columns with stats +
    sample values, PKs, FKs).
 2. ``card_store.SchemaCardStore`` — persists cards as JSON in MinIO with TTL.
-3. ``planner.RetrievalPlanner`` — builds the planner prompt with the relevant
-   slice of cards + few-shot system prompt, drives ``/agent/v1`` internally
-   with probe-only tools, parses the agent's JSON plan.
+3. ``planner.parse_retrieval_plan`` — validates a structured plan emitted by
+   the data agent.
 4. ``replay.PlanReplayer`` — executes the plan deterministically (psycopg +
-   MinIO), retries once on SQL error with the error message fed back to the
-   agent, materializes the result file under
+   MinIO) and materializes the result file under
    ``s3://<bucket>/retrievals/<run_id>/result.<fmt>``.
 
 References: M-Schema (arxiv:2411.08599), CHESS (arxiv:2405.16755),

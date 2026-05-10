@@ -13,8 +13,9 @@ one unified URL:
    passthrough SQL gateway (`/sql`). Power users + SDKs hit these
    directly.
 2. **LLM-driven data agent** — `/agent/v1` runs a tool-use loop over
-   the same CRUD endpoints; `/mcp` exposes the same tools to any MCP
-   client. Same auth, same audit log.
+   the same CRUD endpoints plus deterministic schema-card and
+   replay/materialization tools; `/mcp` exposes the CRUD tools to any
+   MCP client. Same auth, same audit log.
 
 The agent is **chat-with-data** (Snowflake Cortex / Databricks Genie
 lane): an LLM orchestrates the CRUD calls. There is no privileged
@@ -53,6 +54,8 @@ backdoor — the agent uses the same URLs a direct client would.
 |------|---------|
 | `src/lumid_data/server/main.py` | FastAPI app + lifespan |
 | `src/lumid_data/server/routers/` | health, db_proxy, storage, sql, streams, agent, admin, mcp_mount |
+| `src/lumid_data/server/skills.py` | named agent workflow instructions such as `data_retrieval` |
+| `src/lumid_data/server/services/retrieval_tools.py` | data-agent tools for schema cards and replay/materialization |
 | `src/lumid_data/server/services/` | postgrest_jwt, audit, s3 |
 | `src/lumid_data/server/auth/security.py` | bearer-token shim; delegates to the IDENTITY_PROVIDERS chain (no-op when empty) |
 | `src/lumid_data/server/hooks/` | plugin extension protocols + registries |

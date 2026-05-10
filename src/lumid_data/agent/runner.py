@@ -4,18 +4,20 @@ The runner is **stateless** with respect to the LLM session — each
 ``run()`` opens, drives, and closes a transcript. The transcript is
 returned (and the caller persists it into ``agent_runs``).
 
-Tool execution is by **HTTP roundtrip to the same lumid.data instance**
-that's running the agent. The agent calls the same URLs a direct client
-would, with the user's bearer token, so RBAC + audit are uniform.
+Tool execution is either a local deterministic handler or an HTTP
+roundtrip to the same lumid.data instance that's running the agent.
+HTTP tools call the same URLs a direct client would, with the user's
+bearer token, so RBAC + audit are uniform.
 """
 
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
+from fastapi.encoders import jsonable_encoder
 
 from .providers.base import (
     ChatMessage,
@@ -26,6 +28,8 @@ from .providers.base import (
 from .tools import _tool_name as _route_tool_name  # noqa: F401  (test seam)
 
 logger = logging.getLogger(__name__)
+
+LocalToolHandler = Callable[[dict[str, Any]], Awaitable[Any]]
 
 
 @dataclass
@@ -54,9 +58,19 @@ class ToolDispatcher:
     timeout_sec: float = 30.0
     tools_by_name: dict[str, ToolDef] = field(default_factory=dict)
     routes_by_name: dict[str, tuple[str, str]] = field(default_factory=dict)
+    local_tools: dict[str, LocalToolHandler] = field(default_factory=dict)
     # name -> (method, path-template)
 
     async def call(self, tc: ToolCall) -> dict[str, Any]:
+        if tc.name not in self.tools_by_name:
+            return {"error": f"tool {tc.name!r} is not available in this run"}
+        if tc.name in self.local_tools:
+            try:
+                data = await self.local_tools[tc.name](tc.arguments)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("local tool %s failed", tc.name)
+                return {"status_code": 500, "body": {"error": str(exc)}}
+            return {"status_code": 200, "body": data}
         if tc.name not in self.routes_by_name:
             return {"error": f"unknown tool {tc.name!r}"}
         method, path_template = self.routes_by_name[tc.name]
@@ -81,10 +95,10 @@ class ToolDispatcher:
                 method, url, params=params, headers=headers, json=body_payload
             )
         try:
-            data: Any = resp.json()
+            response_body: Any = resp.json()
         except ValueError:
-            data = resp.text
-        return {"status_code": resp.status_code, "body": data}
+            response_body = resp.text
+        return {"status_code": resp.status_code, "body": response_body}
 
 
 def build_dispatcher_from_app(
@@ -126,6 +140,9 @@ async def run(
     goal: str,
     max_steps: int = 20,
     system: str | None = None,
+    required_success_tools: set[str] | None = None,
+    required_tools_message: str | None = None,
+    tool_result_visibility: str = "full",
 ) -> AsyncIterator[RunnerEvent]:
     """Drive the tool-use loop, yielding RunnerEvents as they happen."""
     transcript: list[dict[str, Any]] = []
@@ -136,6 +153,8 @@ async def run(
     steps = 0
     status = "done"
     error: str | None = None
+    successful_tools: set[str] = set()
+    completed = False
 
     dispatcher.tools_by_name = {t.name: t for t in tools}
 
@@ -198,7 +217,16 @@ async def run(
         )
 
         if not tool_calls:
-            break
+            missing = (required_success_tools or set()) - successful_tools
+            if not missing:
+                completed = True
+                break
+            prompt = required_tools_message or (
+                "You must call the required tool(s) before finishing: "
+                f"{', '.join(sorted(missing))}."
+            )
+            messages.append(ChatMessage(role="user", content=prompt))
+            continue
 
         assistant_blocks: list[dict[str, Any]] = []
         if assistant_text:
@@ -217,20 +245,24 @@ async def run(
         tool_result_blocks: list[dict[str, Any]] = []
         for tc in tool_calls:
             result = await dispatcher.call(tc)
+            if result.get("status_code") and int(result["status_code"]) < 300:
+                successful_tools.add(tc.name)
             yield RunnerEvent(
                 type="tool_result",
-                payload={"call_id": tc.call_id, "result": result},
+                payload={"call_id": tc.call_id, "name": tc.name, "result": result},
             )
             tool_result_blocks.append(
                 {
                     "type": "tool_result",
                     "tool_use_id": tc.call_id,
-                    "content": json.dumps(result)[:8000],
+                    "content": _tool_result_content_for_model(
+                        tc, result, visibility=tool_result_visibility
+                    ),
                 }
             )
         messages.append(ChatMessage(role="tool", content=tool_result_blocks))
 
-    if steps >= max_steps:
+    if not completed and steps >= max_steps:
         status = "aborted"
         error = "max_steps exhausted"
 
@@ -246,3 +278,54 @@ async def run(
             "transcript": transcript,
         },
     )
+
+
+def _tool_result_content_for_model(
+    tc: ToolCall, result: dict[str, Any], *, visibility: str
+) -> str:
+    if visibility == "full":
+        return json.dumps(jsonable_encoder(result))[:8000]
+    if visibility != "preview_stats":
+        return (
+            "Tool call completed. Result content is not available "
+            "in the model context."
+        )
+    sanitized: dict[str, Any] = {}
+    if "status_code" in result:
+        sanitized["status_code"] = result["status_code"]
+    if "error" in result:
+        sanitized["error"] = result["error"]
+        return json.dumps(sanitized)[:8000]
+    body = result.get("body")
+    if not isinstance(body, dict):
+        sanitized["body"] = {"message": "result body withheld"}
+        return json.dumps(sanitized)[:8000]
+    if tc.name == "replay_retrieval_plan":
+        sanitized["body"] = {
+            key: body[key]
+            for key in (
+                "run_id",
+                "output_format",
+                "rowcount",
+                "size_bytes",
+                "replay_latency_ms",
+            )
+            if key in body
+        }
+    elif tc.name in {
+        "get_schema_cards",
+        "post_sql_v1_explain",
+        "post_sql_v1_count",
+        "post_sql_v1_sample",
+        "get_storage_v1_list_bucket",
+        "get_storage_v1_stat_bucket_path",
+    }:
+        sanitized["body"] = body
+    else:
+        sanitized["body"] = {
+            "error": (
+                "full result content is not available in this agent run; "
+                "only preview and stats tools are allowed"
+            )
+        }
+    return json.dumps(jsonable_encoder(sanitized))[:8000]

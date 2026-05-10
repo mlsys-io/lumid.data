@@ -22,12 +22,17 @@ def _client() -> Client:
 def run(
     goal: str = typer.Argument(..., help="natural-language intent"),
     max_steps: int = typer.Option(20, "--max-steps"),
+    skill: list[str] | None = typer.Option(
+        None, "--skill", help="Agent skill to enable, e.g. data_retrieval"
+    ),
     model: str | None = typer.Option(None, "--model"),
     json_out: bool = typer.Option(False, "--json"),
 ) -> None:
     c = _client()
     try:
-        for event, payload in c.agent_run(goal, max_steps=max_steps, model=model):
+        for event, payload in c.agent_run(
+            goal, skills=skill, max_steps=max_steps, model=model
+        ):
             if json_out:
                 typer.echo(json.dumps({"event": event, "payload": payload}))
             elif event == "text":

@@ -5,8 +5,9 @@ A **data management service** with two surfaces under one URL:
 - **Traditional CRUD** — REST over Postgres (`/db`), S3-compatible
   object storage (`/storage`), plus a SQL passthrough (`/sql`).
 - **LLM-driven data agent** — `/agent/v1` orchestrates the same CRUD
-  endpoints over an LLM tool-use loop; `/mcp` exposes the same tools to
-  any MCP client. Same auth, same audit log, no privileged backdoor.
+  endpoints plus deterministic schema-card and replay/materialization
+  tools over an LLM tool-use loop; `/mcp` exposes the CRUD tools to any
+  MCP client. Same auth, same audit log, no privileged backdoor.
 
 ## Quick start
 
@@ -35,7 +36,7 @@ curl -X PUT http://127.0.0.1:9100/storage/v1/object/lumid-data/hello.txt --data 
 # Agent (streaming SSE)
 curl http://127.0.0.1:9100/agent/v1 \
   -H "Content-Type: application/json" \
-  -d '{"goal": "how many users do we have?"}'
+  -d '{"goal": "how many users do we have?", "skills": ["data_retrieval"]}'
 ```
 
 ## CLI
@@ -44,7 +45,7 @@ curl http://127.0.0.1:9100/agent/v1 \
 lumid-data stack {up, down, restart, ps, logs, build, pull}
 lumid-data sql query "SELECT 1"
 lumid-data storage {get, put, ls, rm}
-lumid-data agent run "..."
+lumid-data agent run "..." --skill data_retrieval
 lumid-data admin {audit, runs, run}
 ```
 

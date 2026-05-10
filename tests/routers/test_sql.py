@@ -51,3 +51,4 @@ async def test_run_sql_returns_rows() -> None:
         result = await run_sql(SqlRequest(query="SELECT 1 AS x"), state=state)
     assert result.rows == [{"x": 1}]
     assert result.rowcount == 1
+    fake_cur.execute.assert_any_call("SELECT 1 AS x", None)

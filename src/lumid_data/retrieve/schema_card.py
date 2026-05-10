@@ -11,6 +11,7 @@ Snowflake Cortex Analyst's YAML semantic model (verified queries,
 synonyms) + Databricks Genie (value dictionaries).
 """
 
+import re
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -79,6 +80,7 @@ class SchemaCardBundle(BaseModel):
 def render_card_for_prompt(card: SchemaCard) -> str:
     """Render a single :class:`SchemaCard` into the M-Schema-style block."""
     lines: list[str] = [f"# Table: {card.fqname}"]
+    lines.append("# Use SQL identifiers exactly as shown below.")
     if card.description:
         lines.append(f"# Description: {card.description}")
     if card.approx_row_count is not None:
@@ -95,7 +97,7 @@ def render_card_for_prompt(card: SchemaCard) -> str:
         if not col.nullable:
             flags.append("NOT NULL")
         flag_str = (" " + ",".join(flags)) if flags else ""
-        bits: list[str] = [f"  ({col.name}:{col.type}{flag_str}"]
+        bits: list[str] = [f"  ({_sql_identifier(col.name)}:{col.type}{flag_str}"]
         if col.description:
             bits.append(f", {col.description}")
         if col.distinct_count is not None:
@@ -134,6 +136,15 @@ def render_card_for_prompt(card: SchemaCard) -> str:
         for q in card.example_questions:
             lines.append(f"#   - {q}")
     return "\n".join(lines)
+
+
+_SIMPLE_SQL_IDENTIFIER = re.compile(r"^[a-z_][a-z0-9_]*$")
+
+
+def _sql_identifier(name: str) -> str:
+    if _SIMPLE_SQL_IDENTIFIER.fullmatch(name):
+        return name
+    return '"' + name.replace('"', '""') + '"'
 
 
 def render_bundle_for_prompt(bundle: SchemaCardBundle) -> str:

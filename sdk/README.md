@@ -1,8 +1,8 @@
 # lumid-data-sdk
 
 HTTP SDK for the lumid.data data plane. Sync + async clients over the
-unified URL — `db_*`, `storage_*`, `sql`, `agent_run`, `healthz`,
-`storage_stat`.
+unified URL — `db_*`, `storage_*`, `sql`, `agent_run`, `retrieve`,
+`healthz`, `storage_stat`.
 
 ## Install
 
