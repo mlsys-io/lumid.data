@@ -13,7 +13,7 @@ A **data management service** with two surfaces under one URL:
 
 ```bash
 # Install
-uv sync --extra dev
+uv sync --all-packages --group dev
 
 # Bring up TimescaleDB + MinIO + Redpanda + PostgREST + lumid.data
 cp .env.example .env       # then edit values

@@ -84,7 +84,7 @@ backdoor — the agent uses the same URLs a direct client would.
 
 ```bash
 pip install uv
-uv sync --extra dev                       # all deps including dev tooling
+uv sync --all-packages --group dev        # all deps including dev tooling
 uv run pre-commit run --all-files         # before any commit
 uv run pytest tests/                      # unit tests
 uv run lumid-data stack up                # full local stack
