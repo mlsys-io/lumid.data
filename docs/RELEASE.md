@@ -112,3 +112,20 @@ python -m pip install lumid-data
 python -c "from lumid_data.sdk import Client; import lumid_data.server.main; assert Client"
 lumid-data --help
 ```
+
+## If a release goes wrong
+
+PyPI versions are immutable: once `vX.Y.Z` is published you cannot edit,
+re-upload, or replace it. Recovery options:
+
+- **Yank** the bad release on PyPI. `pip install` still installs the version
+  when it is explicitly pinned, but resolution skips it otherwise. Use yank
+  for security or correctness bugs that warrant skipping the version
+  entirely.
+- **Cut the next patch.** Bump to `vX.Y.(Z+1)`, fix forward, and publish.
+  This is the default path for any non-critical bug.
+- **`.postN` re-release** of the same source release when the only change is
+  packaging metadata (LICENSE, classifiers, README) and no Python code
+  changed. Rare.
+
+Do not delete or reuse a published version number under any circumstance.
