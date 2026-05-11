@@ -49,11 +49,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-packages --group dev --frozen
 
-      - name: Run tests
-        run: uv run pytest tests/ --ignore=tests/integration -v
-
       - name: Validate release versions
         run: uv run scripts/ci/check_release_version.py --tag "$RELEASE_TAG"
+
+      - name: Run tests
+        run: uv run pytest tests/ --ignore=tests/integration -v
 
       - name: Build distributions
         run: uv build --all-packages --out-dir dist

@@ -29,8 +29,11 @@ def _normalize_version(raw: str) -> str:
     return raw.removeprefix("v")
 
 
-def _render(text: str, version: str) -> str:
-    text = _VERSION_RE.sub(f'version = "{version}"', text, count=1)
+def _render(text: str, version: str, path: Path) -> str:
+    text, count = _VERSION_RE.subn(f'version = "{version}"', text, count=1)
+    if count != 1:
+        rel = path.relative_to(REPO_ROOT)
+        raise SystemExit(f"Expected one project version line in {rel}.")
     return _PIN_RE.sub(
         lambda match: (
             f"{match.group('name')}{match.group('extras') or ''}=={version}"
@@ -53,7 +56,7 @@ def main() -> int:
     changed: list[Path] = []
     for path in PACKAGE_PYPROJECTS:
         original = path.read_text()
-        rendered = _render(original, version)
+        rendered = _render(original, version, path)
         if rendered != original:
             changed.append(path)
             if not args.check:
