@@ -1,0 +1,41 @@
+name: Package Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and smoke-test packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9  # v7
+        with:
+          version: "0.11.8"
+
+      - name: Install dependencies
+        run: uv sync --all-packages --group dev --frozen
+
+      - name: Validate package versions
+        run: uv run scripts/ci/check_release_version.py
+
+      - name: Build distributions
+        run: uv build --all-packages --out-dir dist
+
+      - name: Verify distributions
+        run: uv run scripts/ci/check_package_build.py --dist dist

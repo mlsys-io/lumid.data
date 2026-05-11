@@ -1,0 +1,97 @@
+name: Release
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish, for example v0.1.0.
+        required: true
+        type: string
+      publish_target:
+        description: Package index to publish to.
+        required: true
+        type: choice
+        default: testpypi
+        options:
+          - testpypi
+          - pypi
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+  PUBLISH_TARGET: ${{ github.event_name == 'release' && 'pypi' || inputs.publish_target }}
+
+jobs:
+  build:
+    name: Build and verify distributions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+        with:
+          persist-credentials: false
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9  # v7
+        with:
+          version: "0.11.8"
+
+      - name: Install dependencies
+        run: uv sync --all-packages --group dev --frozen
+
+      - name: Run tests
+        run: uv run pytest tests/ --ignore=tests/integration -v
+
+      - name: Validate release versions
+        run: uv run scripts/ci/check_release_version.py --tag "$RELEASE_TAG"
+
+      - name: Build distributions
+        run: uv build --all-packages --out-dir dist
+
+      - name: Verify distributions
+        run: uv run scripts/ci/check_package_build.py --dist dist
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: lumid-data-dist-${{ env.RELEASE_TAG }}
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish distributions
+    needs: build
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'release' && 'pypi' || inputs.publish_target }}
+    permissions:
+      contents: read  # Required to download release metadata and workflow artifacts.
+      id-token: write  # Required for PyPI Trusted Publishing via OIDC.
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: lumid-data-dist-${{ env.RELEASE_TAG }}
+          path: dist/
+
+      - name: Publish to TestPyPI
+        if: env.PUBLISH_TARGET == 'testpypi'
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # release/v1
+        with:
+          packages-dir: dist/
+          repository-url: https://test.pypi.org/legacy/
+
+      - name: Publish to PyPI
+        if: env.PUBLISH_TARGET == 'pypi'
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # release/v1
+        with:
+          packages-dir: dist/
