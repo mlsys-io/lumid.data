@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "Data management service for the lumid stack: REST CRUD over Postgres + S3 plus an LLM-driven data agent and MCP."
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 dependencies = [
     "fastapi>=0.120.3",
     "uvicorn[standard]>=0.32.1",
@@ -28,10 +29,10 @@ dependencies = [
     "typer>=0.15.0",
     "rich>=14.2.0",
     "pyyaml>=6.0.2",
-    "lumid-data-sdk",
+    "lumid-data-sdk==0.1.0",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "aiosqlite>=0.21.0",
     "black>=25.12.0",
@@ -51,7 +52,7 @@ dev = [
 lumid-data = "lumid_data.cli.main:app"
 
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]

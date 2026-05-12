@@ -7,7 +7,7 @@ unified URL — `db_*`, `storage_*`, `sql`, `agent_run`, `retrieve`,
 ## Install
 
 ```bash
-pip install "lumid-data-sdk @ git+https://github.com/mlsys-io/lumid.data.git#subdirectory=sdk"
+pip install lumid-data-sdk
 ```
 
 ## Usage
