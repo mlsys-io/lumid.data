@@ -29,7 +29,7 @@ jobs:
           version: "0.11.8"
 
       - name: Install dependencies
-        run: uv sync --all-packages --group dev --frozen
+        run: uv sync --all-packages --group dev --locked
 
       - name: Validate package versions
         run: uv run scripts/ci/check_release_version.py
