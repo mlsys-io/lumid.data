@@ -1,16 +1,21 @@
 # Release
 
-`lumid.data` publishes the service package and SDK package:
+`lumid.data` publishes only the SDK:
 
 | Distribution | Source |
 |--------------|--------|
-| `lumid-data` | `pyproject.toml` |
 | `lumid-data-sdk` | `sdk/` |
+
+The `lumid-data` service itself is not published to PyPI — it ships as a
+Docker image built from this repo. The root `pyproject.toml` still tracks the
+synchronized version so the Docker build installs the matching SDK, but the
+service wheel is never uploaded.
 
 ## PyPI setup
 
-Use PyPI Trusted Publishing instead of long-lived API tokens. Configure pending
-or active trusted publishers for both distributions on PyPI and TestPyPI.
+Use PyPI Trusted Publishing instead of long-lived API tokens. Configure a
+pending or active trusted publisher for `lumid-data-sdk` on both PyPI and
+TestPyPI.
 
 Use this publisher configuration:
 
@@ -27,8 +32,10 @@ matching TestPyPI run before approving production publishing.
 
 ## Prepare a release
 
-1. Pick the next synchronized package version, for example `0.1.1`.
-2. Update package versions and first-party pins:
+1. Pick the next synchronized package version, for example `0.1.1`. The SDK
+   and the service share a version so the tag uniquely identifies both the
+   published SDK and the Docker image cut from the same commit.
+2. Update package versions and the internal SDK pin:
 
    ```bash
    uv run scripts/dev/bump_version.py 0.1.1
@@ -46,11 +53,11 @@ matching TestPyPI run before approving production publishing.
    uv run scripts/ci/check_release_version.py --tag v0.1.1
    ```
 
-5. Build and smoke-test the distributions:
+5. Build and smoke-test the SDK:
 
    ```bash
    uv sync --all-packages --group dev --frozen
-   uv build --all-packages --out-dir dist
+   uv build --package lumid-data-sdk --out-dir dist
    uv run scripts/ci/check_package_build.py --dist dist
    ```
 
@@ -78,24 +85,22 @@ Run the `Release` workflow manually:
 gh workflow run release.yml -f tag=v0.1.1 -f publish_target=testpypi
 ```
 
-Then verify the published artifacts from TestPyPI in a fresh environment:
+Then verify the published artifact from TestPyPI in a fresh environment:
 
 ```bash
 python -m venv .venv-testpypi
 . .venv-testpypi/bin/activate
 python -m pip install --upgrade pip
 python -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ lumid-data-sdk
-python -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ lumid-data
-python -c "from lumid_data.sdk import Client; import lumid_data.server.main; assert Client"
-lumid-data --help
+python -c "from lumid_data.sdk import AsyncClient, Client; assert Client and AsyncClient"
 ```
 
 ## Publish to PyPI
 
 Create a GitHub Release from the same `vX.Y.Z` tag. Publishing the release
-triggers `.github/workflows/release.yml`, which rebuilds from the tag, runs
-tests, validates versions, smoke-tests the wheels, and publishes the uploaded
-artifact set to PyPI after the `pypi` environment approval.
+triggers `.github/workflows/release.yml`, which rebuilds from the tag,
+validates versions, smoke-tests the wheel, and publishes the uploaded
+artifact to PyPI after the `pypi` environment approval.
 
 Do not move or force-update release tags. The release workflow assumes the tag
 already passed PR or main-branch CI, and moving a tag can bypass that validation
@@ -108,9 +113,7 @@ python -m venv .venv-pypi
 . .venv-pypi/bin/activate
 python -m pip install --upgrade pip
 python -m pip install lumid-data-sdk
-python -m pip install lumid-data
-python -c "from lumid_data.sdk import Client; import lumid_data.server.main; assert Client"
-lumid-data --help
+python -c "from lumid_data.sdk import AsyncClient, Client; assert Client and AsyncClient"
 ```
 
 ## If a release goes wrong

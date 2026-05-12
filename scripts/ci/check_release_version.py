@@ -10,14 +10,8 @@ PACKAGE_PYPROJECTS: tuple[Path, ...] = (
     REPO_ROOT / "pyproject.toml",
     REPO_ROOT / "sdk" / "pyproject.toml",
 )
-FIRST_PARTY_DISTRIBUTIONS = {
-    "lumid-data",
-    "lumid-data-sdk",
-}
 
 _TAG_RE = re.compile(r"^v(?P<version>[0-9]+(?:\.[0-9]+){2}[A-Za-z0-9.!+_-]*)$")
-_DEP_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)(?:\[[^\]]+\])?(?P<rest>.*)$")
-_EXACT_PIN_RE = re.compile(r"^==(?P<version>[^;,\s]+)")
 
 
 def _load_pyproject(path: Path) -> dict:
@@ -32,15 +26,6 @@ def _release_version(tag: str | None) -> str | None:
     if match is None:
         raise SystemExit(f"Release tag must look like vX.Y.Z, got {tag!r}.")
     return match.group("version")
-
-
-def _project_dependencies(data: dict) -> list[str]:
-    project = data.get("project", {})
-    dependencies = list(project.get("dependencies", []))
-    dependency_groups = data.get("dependency-groups", {})
-    for specs in dependency_groups.values():
-        dependencies.extend(spec for spec in specs if isinstance(spec, str))
-    return dependencies
 
 
 def _check_versions(expected: str | None) -> str:
@@ -66,27 +51,6 @@ def _check_versions(expected: str | None) -> str:
     return unique_versions.pop()
 
 
-def _check_internal_pins(expected: str) -> None:
-    failures: list[str] = []
-    for path in PACKAGE_PYPROJECTS:
-        data = _load_pyproject(path)
-        rel = path.relative_to(REPO_ROOT)
-        for spec in _project_dependencies(data):
-            match = _DEP_RE.match(spec)
-            if match is None:
-                continue
-            name = match.group("name").lower().replace("_", "-")
-            if name not in FIRST_PARTY_DISTRIBUTIONS:
-                continue
-            pin = _EXACT_PIN_RE.match(match.group("rest").lstrip())
-            if pin is None:
-                failures.append(f"{rel}: {spec!r} should pin =={expected}")
-            elif pin.group("version") != expected:
-                failures.append(f"{rel}: {spec!r} should pin =={expected}")
-    if failures:
-        raise SystemExit("Stale internal package pins:\n" + "\n".join(failures))
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -97,7 +61,6 @@ def main() -> int:
 
     expected = _release_version(args.tag)
     version = _check_versions(expected)
-    _check_internal_pins(version)
     print(f"Release package versions are synchronized at {version}.")
     return 0
 

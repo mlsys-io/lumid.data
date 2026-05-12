@@ -64,8 +64,8 @@ jobs:
       - name: Run tests
         run: uv run pytest tests/ --ignore=tests/integration -v
 
-      - name: Build distributions
-        run: uv build --all-packages --out-dir dist
+      - name: Build distribution
+        run: uv build --package lumid-data-sdk --out-dir dist
 
       - name: Check distribution metadata
         run: uvx twine==6.2.0 check dist/*

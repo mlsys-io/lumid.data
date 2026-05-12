@@ -1,4 +1,4 @@
-"""Validate built lumid.data distributions."""
+"""Validate the built lumid-data-sdk distribution."""
 
 import argparse
 import subprocess
@@ -7,24 +7,20 @@ import venv
 from pathlib import Path
 
 
-def _script_bin(env_dir: Path, name: str) -> Path:
-    return env_dir / "bin" / name
-
-
 def _run(cmd: list[str]) -> None:
     subprocess.run(cmd, check=True)  # nosec B603: fixed argv list, no shell.
 
 
-def _wheel(dist_dir: Path, prefix: str) -> Path:
-    wheels = sorted(dist_dir.glob(f"{prefix}-*-py3-none-any.whl"))
+def _sdk_wheel(dist_dir: Path) -> Path:
+    wheels = sorted(dist_dir.glob("lumid_data_sdk-*-py3-none-any.whl"))
     if len(wheels) != 1:
-        raise SystemExit(f"Expected one {prefix} wheel, found {len(wheels)}")
+        raise SystemExit(f"Expected one lumid_data_sdk wheel, found {len(wheels)}")
     return wheels[0]
 
 
 def _create_venv(env_dir: Path) -> Path:
     venv.EnvBuilder(with_pip=True).create(env_dir)
-    return _script_bin(env_dir, "python")
+    return env_dir / "bin" / "python"
 
 
 def _smoke_sdk(sdk_wheel: Path) -> None:
@@ -41,32 +37,6 @@ assert Client and AsyncClient
         _run([python.as_posix(), "-c", code])
 
 
-def _smoke_root(dist_dir: Path, root_wheel: Path) -> None:
-    """Install the root wheel with sibling distributions and run the CLI."""
-    code = """
-from lumid_data.sdk import Client
-import lumid_data.server.main
-
-assert Client
-"""
-    with tempfile.TemporaryDirectory(prefix="lumid-data-smoke-") as tmp:
-        env_dir = Path(tmp) / ".venv"
-        python = _create_venv(env_dir)
-        _run(
-            [
-                python.as_posix(),
-                "-m",
-                "pip",
-                "install",
-                "--find-links",
-                dist_dir.as_posix(),
-                root_wheel.as_posix(),
-            ]
-        )
-        _run([python.as_posix(), "-c", code])
-        _run([_script_bin(env_dir, "lumid-data").as_posix(), "--help"])
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -81,10 +51,7 @@ def main() -> int:
     if not dist_dir.is_dir():
         raise SystemExit(f"Distribution directory does not exist: {dist_dir}")
 
-    sdk_wheel = _wheel(dist_dir, "lumid_data_sdk")
-    root_wheel = _wheel(dist_dir, "lumid_data")
-    _smoke_sdk(sdk_wheel)
-    _smoke_root(dist_dir, root_wheel)
+    _smoke_sdk(_sdk_wheel(dist_dir))
     return 0
 
 
