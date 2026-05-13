@@ -54,7 +54,7 @@ async def ensure_postgres_landing(sink: dict[str, Any], engine: AsyncEngine) -> 
 
     Schema: (received_at TIMESTAMPTZ, payload JSONB, headers JSONB,
     offset JSONB). Caller is expected to project columns via materialized
-    views or PostgREST RPC; we keep the core table tiny.
+    views or stored functions; we keep the core table tiny.
     """
     schema = _quote_ident(sink.get("schema", "public"))
     table = _quote_ident(sink["table"])

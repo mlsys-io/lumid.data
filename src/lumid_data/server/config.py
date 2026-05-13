@@ -25,12 +25,7 @@ class Settings(BaseSettings):
     s3_region: str = Field("us-east-1", alias="S3_REGION")
     s3_default_bucket: str = Field("lumid-data", alias="S3_DEFAULT_BUCKET")
 
-    postgrest_url: str = Field("http://postgrest:3000", alias="POSTGREST_URL")
-    postgrest_jwt_secret: str = Field(..., alias="POSTGREST_JWT_SECRET")
-    postgrest_jwt_ttl_sec: int = Field(60, alias="POSTGREST_JWT_TTL_SEC")
-    postgrest_anon_role: str = Field("postgrest_anon", alias="POSTGREST_ANON_ROLE")
-    postgrest_user_role: str = Field("app_user", alias="POSTGREST_USER_ROLE")
-    postgrest_admin_role: str = Field("app_admin", alias="POSTGREST_ADMIN_ROLE")
+    db_admin_role: str = Field("app_admin", alias="DB_ADMIN_ROLE")
 
     nats_url: str | None = Field(None, alias="NATS_URL")
     kafka_bootstrap: str | None = Field(None, alias="KAFKA_BOOTSTRAP")

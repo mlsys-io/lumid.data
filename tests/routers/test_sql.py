@@ -9,9 +9,7 @@ from lumid_data.server.routers.sql import SqlRequest, run_sql
 
 
 class _Settings:
-    postgrest_admin_role = "admin"
-    postgrest_user_role = "user"
-    postgrest_anon_role = "anon"
+    db_admin_role = "admin"
     database_url = "postgresql://host/db"
 
 

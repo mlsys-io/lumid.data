@@ -67,46 +67,6 @@ class Client:
             h.update(extra)
         return h
 
-    # ── /db ───────────────────────────────────────────────────────
-
-    def db_select(self, table: str, **filters: str) -> list[dict[str, Any]]:
-        """``GET /db/v1/{table}`` with PostgREST filter syntax (id=eq.1)."""
-        with httpx.Client(timeout=self._timeout) as c:
-            r = c.get(
-                f"{self._base_url}/db/v1/{table}",
-                headers=self._headers(),
-                params=filters,
-            )
-        return _ok_json(r, "db_select")
-
-    def db_insert(self, table: str, rows: list[dict[str, Any]] | dict[str, Any]) -> Any:
-        with httpx.Client(timeout=self._timeout) as c:
-            r = c.post(
-                f"{self._base_url}/db/v1/{table}",
-                headers=self._headers({"Prefer": "return=representation"}),
-                json=rows,
-            )
-        return _ok_json(r, "db_insert")
-
-    def db_update(self, table: str, patch: dict[str, Any], **filters: str) -> Any:
-        with httpx.Client(timeout=self._timeout) as c:
-            r = c.patch(
-                f"{self._base_url}/db/v1/{table}",
-                headers=self._headers({"Prefer": "return=representation"}),
-                params=filters,
-                json=patch,
-            )
-        return _ok_json(r, "db_update")
-
-    def db_delete(self, table: str, **filters: str) -> Any:
-        with httpx.Client(timeout=self._timeout) as c:
-            r = c.delete(
-                f"{self._base_url}/db/v1/{table}",
-                headers=self._headers(),
-                params=filters,
-            )
-        return _ok_json(r, "db_delete")
-
     # ── /storage ──────────────────────────────────────────────────
 
     def storage_get(self, bucket: str, path: str) -> bytes:
@@ -392,47 +352,6 @@ class AsyncClient:
         if extra:
             h.update(extra)
         return h
-
-    # ── /db ───────────────────────────────────────────────────────
-
-    async def db_select(self, table: str, **filters: str) -> list[dict[str, Any]]:
-        async with httpx.AsyncClient(timeout=self._timeout) as c:
-            r = await c.get(
-                f"{self._base_url}/db/v1/{table}",
-                headers=self._headers(),
-                params=filters,
-            )
-        return _ok_json(r, "db_select")
-
-    async def db_insert(
-        self, table: str, rows: list[dict[str, Any]] | dict[str, Any]
-    ) -> Any:
-        async with httpx.AsyncClient(timeout=self._timeout) as c:
-            r = await c.post(
-                f"{self._base_url}/db/v1/{table}",
-                headers=self._headers({"Prefer": "return=representation"}),
-                json=rows,
-            )
-        return _ok_json(r, "db_insert")
-
-    async def db_update(self, table: str, patch: dict[str, Any], **filters: str) -> Any:
-        async with httpx.AsyncClient(timeout=self._timeout) as c:
-            r = await c.patch(
-                f"{self._base_url}/db/v1/{table}",
-                headers=self._headers({"Prefer": "return=representation"}),
-                params=filters,
-                json=patch,
-            )
-        return _ok_json(r, "db_update")
-
-    async def db_delete(self, table: str, **filters: str) -> Any:
-        async with httpx.AsyncClient(timeout=self._timeout) as c:
-            r = await c.delete(
-                f"{self._base_url}/db/v1/{table}",
-                headers=self._headers(),
-                params=filters,
-            )
-        return _ok_json(r, "db_delete")
 
     # ── /storage ──────────────────────────────────────────────────
 

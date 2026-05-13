@@ -47,7 +47,6 @@ async def app_state():
         sessionmaker=sm,
         s3_cfg=None,  # type: ignore[arg-type]
         s3_client=None,
-        postgrest_jwt=None,  # type: ignore[arg-type]
         audit=None,  # type: ignore[arg-type]
         stream_runner=runner,
     )

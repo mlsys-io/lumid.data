@@ -16,7 +16,6 @@ from .config import load_settings
 from .routers import (
     admin,
     agent,
-    db_proxy,
     health,
     mcp_mount,
     sql,
@@ -24,7 +23,6 @@ from .routers import (
     streams,
 )
 from .services.audit import AuditWriter, connect_nats
-from .services.postgrest_jwt import PostgrestJwtConfig
 from .services.s3 import S3Config
 from .services.s3 import ensure_bucket as ensure_s3_bucket
 from .services.s3 import make_client as make_s3_client
@@ -77,14 +75,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     s3_client = make_s3_client(s3_cfg)
     ensure_s3_bucket(s3_client, settings.s3_default_bucket)
 
-    postgrest_jwt = PostgrestJwtConfig(
-        secret=settings.postgrest_jwt_secret,
-        ttl_sec=settings.postgrest_jwt_ttl_sec,
-        anon_role=settings.postgrest_anon_role,
-        user_role=settings.postgrest_user_role,
-        admin_role=settings.postgrest_admin_role,
-    )
-
     nats_client = await connect_nats(settings.nats_url)
     audit = AuditWriter(sessionmaker=sessionmaker, nats_client=nats_client)
 
@@ -110,7 +100,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         sessionmaker=sessionmaker,
         s3_cfg=s3_cfg,
         s3_client=s3_client,
-        postgrest_jwt=postgrest_jwt,
         audit=audit,
         llm_adapter=llm_adapter,
         stream_runner=stream_runner,
@@ -147,13 +136,13 @@ def create_app() -> FastAPI:
         title="lumid.data",
         version="0.1.0",
         description=(
-            "Data management service: REST CRUD over Postgres + S3 plus an "
-            "LLM-driven data agent and an MCP server, all under one URL."
+            "Data management service: raw SQL over Postgres plus S3 object "
+            "storage, an LLM-driven data agent, and an MCP server, all under "
+            "one URL."
         ),
         lifespan=lifespan,
     )
     app.include_router(health.router)
-    app.include_router(db_proxy.router)
     app.include_router(storage.router)
     app.include_router(sql.router)
     app.include_router(streams.router)

@@ -1,7 +1,7 @@
 # One-click data management service.
 #
 #   docker compose up -d                     # app only, talks to .env endpoints
-#   docker compose --profile bundled up -d   # also bring up Postgres/MinIO/PostgREST/Redpanda
+#   docker compose --profile bundled up -d   # also bring up Postgres/MinIO/Redpanda
 
 name: lumid-data
 
@@ -95,24 +95,6 @@ services:
       exit 0
       "
 
-  postgrest:
-    image: postgrest/postgrest:v12.2.3
-    restart: unless-stopped
-    profiles: [bundled]
-    environment:
-      PGRST_DB_URI: postgres://app_admin:${POSTGREST_USER_PASSWORD:-app_admin}@postgres:5432/lumid_data
-      PGRST_DB_SCHEMAS: public
-      PGRST_DB_ANON_ROLE: postgrest_anon
-      PGRST_JWT_SECRET: ${POSTGREST_JWT_SECRET:?POSTGREST_JWT_SECRET is required}
-      PGRST_JWT_AUD: lumid-data
-      PGRST_OPENAPI_MODE: ignore-privileges
-      PGRST_LOG_LEVEL: info
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks: [lumid_net]
-    ports: ["3000:3000"]
-
   app:
     build:
       context: .
@@ -123,9 +105,8 @@ services:
       - .env
     network_mode: host
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://app_admin:${POSTGREST_USER_PASSWORD:-app_admin}@127.0.0.1:5432/lumid_data}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://postgres:postgres@127.0.0.1:5432/lumid_data}
       S3_ENDPOINT: ${S3_ENDPOINT:-http://127.0.0.1:9000}
-      POSTGREST_URL: ${POSTGREST_URL:-http://127.0.0.1:3000}
       KAFKA_BOOTSTRAP: ${KAFKA_BOOTSTRAP:-127.0.0.1:9092}
     volumes:
       - ${AWS_CA_BUNDLE:-/dev/null}:${AWS_CA_BUNDLE:-/dev/null}:ro
@@ -138,9 +119,6 @@ services:
         required: false
       minio-init:
         condition: service_completed_successfully
-        required: false
-      postgrest:
-        condition: service_started
         required: false
       redpanda:
         condition: service_healthy

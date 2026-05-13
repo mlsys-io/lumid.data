@@ -30,17 +30,16 @@ backdoor — the agent uses the same URLs a direct client would.
                   ▼
    ┌─────────────────────────────────────────────────────────┐
    │  lumid.data  FastAPI (port 9100)                        │
-   │   /db/v1/*       → reverse-proxy to PostgREST sidecar   │
-   │   /storage/v1/*  → boto3 over MinIO (sign / put / get)  │
    │   /sql/v1        → psycopg passthrough (admin role)     │
+   │   /storage/v1/*  → boto3 over MinIO (sign / put / get)  │
    │   /agent/v1      → LLM tool-use loop, SSE streaming     │
    │   /mcp           → MCP server (CRUD endpoints as tools) │
    │   /v1/admin/*    → audit_log + agent_runs read views    │
    │   /healthz, /docs                                       │
-   └────┬─────────────┬─────────────┬──────────────┬─────────┘
-        ▼             ▼             ▼              ▼
-   PostgREST     Postgres       MinIO        LLM provider
-   (sidecar)    public + meta   buckets      (Anthropic |
+   └────────┬───────────────────┬──────────────────┬─────────┘
+            ▼                   ▼                  ▼
+        Postgres              MinIO          LLM provider
+        public + meta         buckets        (Anthropic |
                                               OpenAI |
                                               OpenAI-compat)
 
@@ -53,10 +52,10 @@ backdoor — the agent uses the same URLs a direct client would.
 | Path | Purpose |
 |------|---------|
 | `src/lumid_data/server/main.py` | FastAPI app + lifespan |
-| `src/lumid_data/server/routers/` | health, db_proxy, storage, sql, streams, agent, admin, mcp_mount |
+| `src/lumid_data/server/routers/` | health, storage, sql, streams, agent, admin, mcp_mount |
 | `src/lumid_data/server/skills.py` | named agent workflow instructions such as `data_retrieval` |
 | `src/lumid_data/server/services/retrieval_tools.py` | data-agent tools for schema cards and replay/materialization |
-| `src/lumid_data/server/services/` | postgrest_jwt, audit, s3 |
+| `src/lumid_data/server/services/` | audit, s3 |
 | `src/lumid_data/server/auth/security.py` | bearer-token shim; delegates to the IDENTITY_PROVIDERS chain (no-op when empty) |
 | `src/lumid_data/server/hooks/` | plugin extension protocols + registries |
 | `src/lumid_data/streams/` | webhook + websocket + kafka adapters, sinks, supervised runner |
@@ -73,7 +72,6 @@ backdoor — the agent uses the same URLs a direct client would.
 | Slot | Choice |
 |------|--------|
 | Database | TimescaleDB on PostgreSQL 16 (hypertables opt-in per stream) |
-| DB REST gateway | PostgREST (sidecar) |
 | Object store | MinIO (S3-compatible) |
 | Streaming bus | Redpanda (Kafka API; only needed for kafka-transport streams) |
 | Audit fan-out | NATS (optional) |
@@ -109,7 +107,6 @@ short-circuit auth in the unconfigured case.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/healthz` | health check |
-| ANY | `/db/v1/{table}` (PostgREST shape) | CRUD with `id=eq.1` filters |
 | GET | `/storage/v1/object/{bucket}/{path}` | download |
 | PUT | `/storage/v1/object/{bucket}/{path}` | upload |
 | POST | `/storage/v1/upload/sign/{bucket}/{path}` | presigned PUT |
@@ -143,14 +140,11 @@ from lumid_data.sdk import Client
 
 client = Client(base_url="http://localhost:9100", token=os.environ.get("LUMID_TOKEN"))
 
-# /db
-rows = client.db_select("users", id="eq.1")
+# /sql
+result = client.sql("SELECT count(*) FROM users")
 
 # /storage
 client.storage_put("photos", "cat.png", open("cat.png", "rb").read(), mime="image/png")
-
-# /sql
-result = client.sql("SELECT count(*) FROM users")
 
 # /agent (streams SSE)
 for event, payload in client.agent_run("how many users do we have?"):
@@ -181,9 +175,7 @@ to `.env.example` at the repo root.
 | `S3_ENDPOINT` | – | MinIO / S3 endpoint |
 | `S3_ACCESS_KEY` / `S3_SECRET_KEY` | – | MinIO credentials |
 | `S3_DEFAULT_BUCKET` | `lumid-data` | default bucket |
-| `POSTGREST_URL` | `http://postgrest:3000` | sidecar URL for `/db` proxy |
-| `POSTGREST_JWT_SECRET` | – | shared JWT secret with PostgREST |
-| `POSTGREST_JWT_TTL_SEC` | `60` | JWT lifetime |
+| `DB_ADMIN_ROLE` | `app_admin` | Postgres role `/sql/v1` switches to via `SET LOCAL ROLE` |
 | `NATS_URL` | – | optional audit fan-out |
 | `LUMID_DATA_LLM_PROVIDER` | `anthropic` | `anthropic | openai | openai_compat` |
 | `LUMID_DATA_LLM_MODEL` | `claude-sonnet-4-6` | model name |
