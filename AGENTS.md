@@ -8,10 +8,9 @@ this repo. `CLAUDE.md` redirects here.
 `lumid.data` is a **data management service** with two surfaces under
 one unified URL:
 
-1. **Traditional CRUD endpoints** — REST over a Postgres database
-   (`/db`), an S3-compatible object store (`/storage`), plus a
-   passthrough SQL gateway (`/sql`). Power users + SDKs hit these
-   directly.
+1. **Traditional CRUD endpoints** — a passthrough SQL gateway (`/sql`)
+   over Postgres, plus an S3-compatible object store (`/storage`).
+   Power users + SDKs hit these directly.
 2. **LLM-driven data agent** — `/agent/v1` runs a tool-use loop over
    the same CRUD endpoints plus deterministic schema-card and
    replay/materialization tools; `/mcp` exposes the CRUD tools to any
