@@ -124,4 +124,4 @@ skips = [
 
 [tool.codespell]
 skip = "*.lock,*.svg,*.po,*.json,*.yaml,*.yml,deploy/*,*.toml"
-ignore-words-list = "lumid,postgrest"
+ignore-words-list = "lumid"

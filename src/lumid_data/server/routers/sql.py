@@ -68,7 +68,7 @@ async def _execute(
     state: AppState, query: str, params: list, op: str, path: str
 ) -> SqlResult:
     principal = default_principal()
-    role = state.settings.postgrest_admin_role
+    role = state.settings.db_admin_role
     started = now_ms()
     rows: list[dict] = []
     rowcount = 0

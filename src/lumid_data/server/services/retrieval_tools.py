@@ -122,7 +122,7 @@ def _get_schema_cards_handler(state: AppState):
         args = SchemaCardsArgs.model_validate(arguments)
         builder = SchemaCardBuilder(
             dsn=_libpq(state.settings.database_url),
-            role=state.settings.postgrest_admin_role,
+            role=state.settings.db_admin_role,
         )
         cache = SchemaCardCache(
             builder=builder,
@@ -153,7 +153,7 @@ def _replay_retrieval_plan_handler(
         replayer = PlanReplayer(
             database_url=state.settings.database_url,
             s3_client=state.s3_client,
-            admin_role=state.settings.postgrest_admin_role,
+            admin_role=state.settings.db_admin_role,
         )
 
         with tempfile.TemporaryDirectory(prefix="retrieve-") as tmp:

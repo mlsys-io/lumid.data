@@ -15,18 +15,18 @@ class TypedToolResult(BaseModel):
 def test_routes_become_tools_with_per_method_names() -> None:
     app = FastAPI()
 
-    @app.get("/db/v1/users", description="list users")
+    @app.get("/custom/v1/users", description="list users")
     async def list_users() -> list:
         return []
 
-    @app.post("/db/v1/users", description="create user")
+    @app.post("/custom/v1/users", description="create user")
     async def create_user(body: dict) -> dict:
         return {}
 
     tools = build_tool_catalog(app)
     names = {t.name for t in tools}
-    assert "get_db_v1_users" in names
-    assert "post_db_v1_users" in names
+    assert "get_custom_v1_users" in names
+    assert "post_custom_v1_users" in names
     assert all(t.input_schema for t in tools)
 
 
@@ -41,13 +41,13 @@ def test_excluded_paths_are_skipped() -> None:
     async def health() -> dict:
         return {}
 
-    @app.get("/db/v1/x")
+    @app.get("/custom/v1/x")
     async def x() -> list:
         return []
 
     tools = build_tool_catalog(app)
     names = {t.name for t in tools}
-    assert "get_db_v1_x" in names
+    assert "get_custom_v1_x" in names
     assert not any("agent" in n for n in names)
     assert not any("health" in n for n in names)
 
@@ -55,7 +55,7 @@ def test_excluded_paths_are_skipped() -> None:
 def test_path_param_is_required() -> None:
     app = FastAPI()
 
-    @app.get("/db/v1/users/{user_id}")
+    @app.get("/custom/v1/users/{user_id}")
     async def get_user(user_id: str) -> dict:
         return {}
 
