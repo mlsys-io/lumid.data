@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     llm_base_url: str | None = Field(None, alias="LUMID_DATA_LLM_BASE_URL")
     agent_max_steps: int = Field(20, alias="LUMID_DATA_AGENT_MAX_STEPS")
 
+    remote_mcp_url: str | None = Field(None, alias="LUMID_DATA_REMOTE_MCP_URL")
+    remote_mcp_token: str | None = Field(None, alias="LUMID_DATA_REMOTE_MCP_TOKEN")
+    remote_mcp_prefix: str = Field("remote_", alias="LUMID_DATA_REMOTE_MCP_PREFIX")
+
     plugins: str = Field("", alias="LUMID_DATA_PLUGINS")
 
 

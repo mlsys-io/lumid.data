@@ -20,8 +20,21 @@ from mcp.types import TextContent, Tool
 from ..agent.tools import _tool_name, build_tool_catalog
 
 
-def build_mcp_server(app: Any, *, base_url: str, name: str = "lumid.data") -> Server:
-    """Construct an MCP Server registering each FastAPI route as a tool."""
+def build_mcp_server(
+    app: Any,
+    *,
+    base_url: str,
+    name: str = "lumid.data",
+) -> Server:
+    """Construct an MCP Server registering each FastAPI route as a tool.
+
+    If lifespan attaches a remote MCP client to ``app.state.app_state``
+    (under attribute ``remote_mcp``), its discovered tools are also
+    surfaced in ``list_tools`` and dispatched through the client on
+    ``call_tool``. Lookup is dynamic so the catalog reflects whatever
+    is current — the server builds at app-construction time but lifespan
+    hasn't run yet.
+    """
     server = Server(name)
     tool_catalog = build_tool_catalog(app)
     routes_by_name: dict[str, tuple[str, str]] = {}
@@ -31,9 +44,12 @@ def build_mcp_server(app: Any, *, base_url: str, name: str = "lumid.data") -> Se
                 continue
             routes_by_name[_tool_name(method, route.path)] = (method, route.path)
 
+    def _remote() -> Any:
+        return getattr(getattr(app.state, "app_state", None), "remote_mcp", None)
+
     @server.list_tools()
     async def list_tools() -> list[Tool]:
-        return [
+        tools = [
             Tool(
                 name=t.name,
                 description=t.description,
@@ -41,6 +57,17 @@ def build_mcp_server(app: Any, *, base_url: str, name: str = "lumid.data") -> Se
             )
             for t in tool_catalog
         ]
+        remote = _remote()
+        if remote is not None:
+            tools.extend(
+                Tool(
+                    name=t.name,
+                    description=t.description,
+                    inputSchema=t.input_schema,
+                )
+                for t in remote.tools()
+            )
+        return tools
 
     caller: Callable[[str, dict[str, Any], str | None], Awaitable[dict[str, Any]]] = (
         _make_caller(routes_by_name, base_url)
@@ -50,6 +77,10 @@ def build_mcp_server(app: Any, *, base_url: str, name: str = "lumid.data") -> Se
     async def call_tool(
         name: str, arguments: dict[str, Any] | None
     ) -> list[TextContent]:
+        remote = _remote()
+        if remote is not None and remote.owns(name):
+            result = await remote.call(name, arguments or {})
+            return [TextContent(type="text", text=json.dumps(result))]
         token = (arguments or {}).pop("_bearer", None) if arguments else None
         result = await caller(name, arguments or {}, token)
         return [TextContent(type="text", text=json.dumps(result))]

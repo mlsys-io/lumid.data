@@ -11,6 +11,7 @@ from fastapi import FastAPI
 
 from ..agent import make_adapter
 from ..db import Base, make_engine, make_sessionmaker
+from ..remote import RemoteMCPClient
 from ..streams.runner import StreamRunner
 from .config import load_settings
 from .routers import (
@@ -94,6 +95,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         kafka_bootstrap_default=settings.kafka_bootstrap,
     )
 
+    remote_mcp: RemoteMCPClient | None = None
+    if settings.remote_mcp_url:
+        remote_mcp = RemoteMCPClient(
+            url=settings.remote_mcp_url,
+            token=settings.remote_mcp_token,
+            prefix=settings.remote_mcp_prefix,
+        )
+        try:
+            await remote_mcp.aopen()
+        except Exception:
+            logger.exception(
+                "remote MCP open failed; continuing without it (%s)",
+                settings.remote_mcp_url,
+            )
+            remote_mcp = None
+
     state = AppState(
         settings=settings,
         engine=engine,
@@ -103,6 +120,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         audit=audit,
         llm_adapter=llm_adapter,
         stream_runner=stream_runner,
+        remote_mcp=remote_mcp,
     )
     state._fastapi_app = app  # type: ignore[attr-defined]
     app.state.app_state = state
@@ -115,6 +133,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             yield
         finally:
             await stream_runner.stop_all()
+            if remote_mcp is not None:
+                try:
+                    await remote_mcp.aclose()
+                except Exception:
+                    logger.exception("remote MCP close failed")
             if nats_client is not None:
                 await nats_client.drain()
             if llm_adapter is not None:

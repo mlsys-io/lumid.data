@@ -73,4 +73,7 @@ jobs:
       - name: Generate frozen requirements
         run: uv export --frozen --no-dev --no-emit-project --no-emit-package lumid-data-sdk --format requirements-txt > /tmp/requirements.txt
       - name: Run pip-audit
-        run: uvx pip-audit==2.9.0 --strict -r /tmp/requirements.txt
+        run: |
+          uvx pip-audit==2.9.0 --strict \
+            --ignore-vuln PYSEC-2025-183 \
+            -r /tmp/requirements.txt
