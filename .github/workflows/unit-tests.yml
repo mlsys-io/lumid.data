@@ -32,4 +32,4 @@ jobs:
         run: uv sync --all-packages --group dev --locked
 
       - name: Run unit tests
-        run: uv run pytest tests/ --ignore=tests/integration -v
+        run: uv run pytest tests/ --ignore=tests/integration --ignore=tests/e2e -v

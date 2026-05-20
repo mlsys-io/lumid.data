@@ -89,7 +89,13 @@ async def run_agent_endpoint(
             await session.commit()
 
         app = state_to_app(state)
-        all_tools = [*build_tool_catalog(app), *retrieval_tool_defs()]
+        remote_client = getattr(state, "remote_mcp", None)
+        remote_tools = remote_client.tools() if remote_client is not None else []
+        all_tools = [
+            *build_tool_catalog(app),
+            *retrieval_tool_defs(),
+            *remote_tools,
+        ]
         if skill_tools is not None and body.tools_allowed:
             allowed = skill_tools & set(body.tools_allowed)
         elif skill_tools is not None:
@@ -112,6 +118,7 @@ async def run_agent_endpoint(
                 agent_run_id=run_id,
             )
         )
+        dispatcher.remote_client = remote_client
         emitted_done: dict | None = None
         try:
             async for ev in run_agent(

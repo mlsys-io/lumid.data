@@ -59,6 +59,7 @@ class ToolDispatcher:
     tools_by_name: dict[str, ToolDef] = field(default_factory=dict)
     routes_by_name: dict[str, tuple[str, str]] = field(default_factory=dict)
     local_tools: dict[str, LocalToolHandler] = field(default_factory=dict)
+    remote_client: Any = None  # ``RemoteMCPClient`` when wired
     # name -> (method, path-template)
 
     async def call(self, tc: ToolCall) -> dict[str, Any]:
@@ -71,6 +72,8 @@ class ToolDispatcher:
                 logger.exception("local tool %s failed", tc.name)
                 return {"status_code": 500, "body": {"error": str(exc)}}
             return {"status_code": 200, "body": data}
+        if self.remote_client is not None and self.remote_client.owns(tc.name):
+            return await self.remote_client.call(tc.name, tc.arguments)
         if tc.name not in self.routes_by_name:
             return {"error": f"unknown tool {tc.name!r}"}
         method, path_template = self.routes_by_name[tc.name]
